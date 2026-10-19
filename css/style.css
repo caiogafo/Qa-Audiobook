@@ -1,0 +1,54 @@
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.7);
+}
+
+/* Diff Highlighting */
+.diff-del {
+  background-color: rgba(239, 68, 68, 0.25);
+  color: #dc2626;
+  text-decoration: line-through;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.diff-ins {
+  background-color: rgba(34, 197, 94, 0.25);
+  color: #16a34a;
+  font-weight: 500;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* Print Styles for Executive Report */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #printable-report,
+  #printable-report * {
+    visibility: visible;
+  }
+
+  #printable-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}
