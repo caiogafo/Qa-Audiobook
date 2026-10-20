@@ -223,13 +223,13 @@
         class="bg-slate-950/70 border border-slate-800 hover:border-brand-500/60 hover:bg-slate-900/90 rounded-xl p-3 flex flex-col justify-between transition cursor-pointer group active:scale-[0.98]">
         <div
           class="flex items-center justify-between text-slate-400 text-xs group-hover:text-slate-200 transition-colors">
-          <span class="font-medium">Páginas Auditadas</span>
+          <span class="font-medium">Páginas nos arquivos</span>
           <i data-lucide="files" class="w-4 h-4 text-brand-400 group-hover:scale-110 transition-transform"></i>
         </div>
         <div class="text-xl font-bold text-white mt-1.5" id="metric-pages">— / —</div>
         <div
           class="flex items-center justify-between text-[10px] text-slate-500 group-hover:text-brand-400 transition-colors">
-          <span>Orig. vs Revisado</span>
+          <span>Contagem informativa; não compara páginas</span>
           <i data-lucide="arrow-right" class="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"></i>
         </div>
       </div>
@@ -247,25 +247,25 @@
         <div class="text-xl font-bold text-amber-400 mt-1.5" id="metric-diffs">0</div>
         <div
           class="flex items-center justify-between text-[10px] text-slate-500 group-hover:text-amber-400 transition-colors">
-          <span>Divergências de texto</span>
+          <span>Trechos divergentes</span>
           <i data-lucide="arrow-right" class="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"></i>
         </div>
       </div>
 
-      <!-- Omissões de Sumário -> Alertas e Diff -->
+      <!-- Omissões de conteúdo -> Alertas e Diff -->
       <div onclick="switchTab('diffTab', 'structuralAlerts')" role="button" tabindex="0"
         onkeydown="if(event.key==='Enter'||event.key===' ')switchTab('diffTab', 'structuralAlerts')"
-        title="Clique para inspecionar os alertas e omissões no sumário"
+        title="Clique para inspecionar trechos ausentes no conteúdo revisado"
         class="bg-slate-950/70 border border-slate-800 hover:border-rose-500/60 hover:bg-slate-900/90 rounded-xl p-3 flex flex-col justify-between transition cursor-pointer group active:scale-[0.98]">
         <div
           class="flex items-center justify-between text-slate-400 text-xs group-hover:text-slate-200 transition-colors">
-          <span class="font-medium">Omissões de Sumário</span>
+          <span class="font-medium">Trechos ausentes</span>
           <i data-lucide="alert-octagon" class="w-4 h-4 text-rose-400 group-hover:scale-110 transition-transform"></i>
         </div>
         <div class="text-xl font-bold text-rose-400 mt-1.5" id="metric-omissions">0</div>
         <div
           class="flex items-center justify-between text-[10px] text-slate-500 group-hover:text-rose-400 transition-colors">
-          <span>Sem alertas pendentes</span>
+          <span>No conteúdo revisado</span>
           <i data-lucide="arrow-right" class="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"></i>
         </div>
       </div>
@@ -422,7 +422,7 @@
       <button onclick="switchTab('diffTab')" id="tab-btn-diffTab"
         class="tab-btn px-4 py-2.5 rounded-t-lg flex items-center gap-2 border-b-2 border-brand-500 text-white bg-slate-950/80">
         <i data-lucide="split" class="w-3.5 h-3.5 text-brand-400"></i>
-        Comparador & Omissões de Sumário
+        Comparador & Auditoria de Conteúdo
       </button>
       <button onclick="switchTab('generatorTab')" id="tab-btn-generatorTab"
         class="tab-btn px-4 py-2.5 rounded-t-lg flex items-center gap-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200">
@@ -463,11 +463,9 @@
         class="hidden bg-rose-950/30 border border-rose-800/60 rounded-xl p-4 flex items-start gap-3">
         <i data-lucide="alert-octagon" class="w-5 h-5 text-rose-400 shrink-0 mt-0.5"></i>
         <div class="text-xs">
-          <h4 class="font-bold text-rose-300 text-sm">Anomalia Crítica na Tabela de Gravação</h4>
+            <h4 class="font-bold text-rose-300 text-sm">Auditoria de conteúdo e revisão do roteiro</h4>
           <p class="text-rose-200/90 mt-1 leading-relaxed" id="structuralAlertText">
-            O <strong>Capítulo 04</strong> está presente no corpo da obra revisada (pág. 75), mas foi
-            <strong>completamente omitido da tabela de capítulos do sumário da Audible</strong> (pula diretamente de CAP
-            03 para CAP 05). Risco crítico de salto de gravação pelo narrador.
+            A comparação usa o conteúdo integral dos documentos; a paginação é apenas informativa.
           </p>
         </div>
       </div>
@@ -598,6 +596,11 @@
             class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs transition shadow-lg shadow-amber-500/20 flex items-center gap-1.5">
             <i data-lucide="refresh-cw" class="w-4 h-4"></i>
             Compilar Roteiro
+          </button>
+          <button onclick="downloadGeneratedTxt()"
+            class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 font-semibold text-xs transition border border-slate-700 flex items-center gap-1.5">
+            <i data-lucide="file-text" class="w-4 h-4"></i>
+            Baixar texto (.txt)
           </button>
           <button onclick="downloadGeneratedPdf()"
             class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-600/25 flex items-center gap-1.5">
@@ -952,7 +955,7 @@
                   <button onclick="downloadGeneratedTxt()"
                     class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition border border-slate-700 flex items-center gap-1">
                     <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
-                    TXT
+                    Baixar texto (.txt)
                   </button>
                   <button onclick="sendGeneratedScriptToAuditor()"
                     title="Carregar este roteiro no Comparador para auditar contra o original"
@@ -1793,6 +1796,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       state.currentPresetKey = null;
       state.docOrig = null;
       state.docRev = null;
+      state.auditMetrics = null;
       state.phonetics = [];
       state.footnotes = [];
       state.bookTerms = [];
@@ -2019,7 +2023,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         if (document.getElementById('genConteudoSensivel')) document.getElementById('genConteudoSensivel').value = data.infosGerais.conteudoSensivel || 'nenhum de peso especial identificado.';
       }
       if (data.phonetics) {
-        genState.phonetics = JSON.parse(JSON.stringify(data.phonetics));
+        genState.phonetics = JSON.parse(JSON.stringify(data.phonetics)).map(item => ({ ...item, source: item.source || 'curated' }));
       }
 
       // Populate Miolo Editor
@@ -2337,9 +2341,9 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       computeDiff(state.docOrig.fullText, state.docRev.fullText);
 
       // QA Score calculation
-      const metricOmissions = document.getElementById('metric-omissions');
-      const hasCritical = metricOmissions && metricOmissions.textContent.includes('crítico');
-      const score = hasCritical ? '96.8%' : (state.currentPresetKey === 'mercadoria' ? '98.5%' : '99.1%');
+      const score = state.auditMetrics
+        ? `${Math.max(0, 100 - (state.auditMetrics.changedWords / Math.max(1, state.auditMetrics.totalWords)) * 100).toFixed(1)}%`
+        : '—';
       const metricQa = document.getElementById('metric-qa-score');
       if (metricQa) metricQa.textContent = score;
 
@@ -2364,15 +2368,71 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
     /**
      * Compute Semantics Diffs
      */
+    function normalizeAuditText(text, ignoreCase = false) {
+      let normalized = String(text || '')
+        .normalize('NFKC')
+        .replace(/---\s*\[\s*(?:PÁG(?:INA)?|PAGE)\s*\d+\s*\]\s*---/gi, ' ')
+        .replace(/\[(?:PÁG(?:INA)?|PAGE)\s*\d+\s*\]/gi, ' ')
+        // Rejoin words split by a line-end hyphen in PDF extraction (ex.: "traba-\nlho").
+        .replace(/([\p{L}]{2,})[-\u00ad]\s*\n\s*([\p{Ll}]{2,})/gu, '$1$2')
+        .replace(/[\u00ad]/g, '')
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/[\u2013\u2014]/g, '-')
+        .replace(/\r\n?/g, '\n')
+        .replace(/[ \t\f\v]+/g, ' ')
+        .replace(/ *\n */g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+      return ignoreCase ? normalized.toLocaleLowerCase('pt-BR') : normalized;
+    }
+
     function computeDiff(origText, revText) {
       const dmp = new diff_match_patch();
-      const diffs = dmp.diff_main(origText, revText);
+      const cleanOrig = normalizeAuditText(origText);
+      const cleanRev = normalizeAuditText(revText);
+      const diffs = dmp.diff_main(cleanOrig, cleanRev);
       dmp.diff_cleanupSemantic(diffs);
+
+      // Count one contiguous changed passage as one finding, not each insert/delete run.
+      const comparableOrig = normalizeAuditText(origText, true).replace(/\s+/g, ' ').trim();
+      const comparableRev = normalizeAuditText(revText, true).replace(/\s+/g, ' ').trim();
+      const auditDiffs = dmp.diff_main(comparableOrig, comparableRev);
+      dmp.diff_cleanupSemantic(auditDiffs);
+      let diffCount = 0;
+      let changedWords = 0;
+      let inChange = false;
+      let deletedText = '';
+      let insertedText = '';
+      const missingHunks = [];
+      const addedHunks = [];
+      const finishHunk = () => {
+        if (deletedText.trim() && !insertedText.trim()) missingHunks.push(deletedText.trim());
+        if (insertedText.trim() && !deletedText.trim()) addedHunks.push(insertedText.trim());
+        deletedText = '';
+        insertedText = '';
+      };
+      for (const [op, text] of auditDiffs) {
+        if (op === 0) {
+          finishHunk();
+          inChange = false;
+          continue;
+        }
+        if (!inChange) diffCount++;
+        inChange = true;
+        const words = text.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) || [];
+        changedWords += words.length || (text.trim() ? 0.1 : 0);
+        if (op === -1) deletedText += text;
+        if (op === 1) insertedText += text;
+      }
+      finishHunk();
+      const totalWords = (comparableOrig.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) || []).length;
+      const reviewFindings = inspectRevisedText(revText);
+      state.auditMetrics = { discrepancies: diffCount, changedWords, totalWords, missingHunks, addedHunks, reviewFindings };
 
       let inlineHtml = '';
       let splitOrigHtml = '';
       let splitRevHtml = '';
-      let diffCount = 0;
 
       for (let i = 0; i < diffs.length; i++) {
         const op = diffs[i][0];
@@ -2382,12 +2442,10 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           // Deletion (in Original, missing from Revised)
           inlineHtml += `<span class="diff-del">${text}</span>`;
           splitOrigHtml += `<span class="diff-del">${text}</span>`;
-          diffCount++;
         } else if (op === 1) {
           // Insertion (new in Revised)
           inlineHtml += `<span class="diff-ins">${text}</span>`;
           splitRevHtml += `<span class="diff-ins">${text}</span>`;
-          diffCount++;
         } else {
           inlineHtml += text;
           splitOrigHtml += text;
@@ -2401,23 +2459,76 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
       document.getElementById('metric-diffs').textContent = diffCount;
 
-      // Structural Alert for Missing Chapter
+      // Report content-level omissions/additions and review checks, independent of page numbers.
       const alertBox = document.getElementById('structuralAlerts');
       const alertText = document.getElementById('structuralAlertText');
       const metricOmissions = document.getElementById('metric-omissions');
-
-      if (state.currentPresetKey === 'beijo' || revText.includes('CAP 05') && !revText.includes('CAP 04 -')) {
-        alertBox.classList.remove('hidden');
-        alertText.innerHTML = `<strong>Inconsistência Grave no Sumário:</strong> O <strong>Capítulo 04</strong> está presente no corpo da obra (pág. 75), mas foi <strong>completamente omitido da tabela de gravação do revisado</strong> (Pág. 3). Além disso, a folha de rosto de tradução/posfácio original foi suprimida.`;
-        metricOmissions.textContent = "1 crítico";
-      } else if (state.currentPresetKey === 'mercadoria') {
-        alertBox.classList.remove('hidden');
-        alertText.innerHTML = `<strong>Supressões Detectadas:</strong> Falsa Folha de Rosto (pág. 1), Ficha Catalográfica / CIP (pág. 77) e Colofão (pág. 78) ausentes no revisado por serem itens gráficos da impressão.`;
-        metricOmissions.textContent = "3 itens";
-      } else {
-        alertBox.classList.add('hidden');
-        metricOmissions.textContent = "0";
+      const alertItems = [];
+      metricOmissions.textContent = state.auditMetrics.missingHunks.length;
+      if (state.auditMetrics.missingHunks.length) {
+        const examples = state.auditMetrics.missingHunks.slice(0, 3).map(text => `“${escapeHtml(text.slice(0, 180))}${text.length > 180 ? '…' : ''}”`).join('<br>');
+        alertItems.push(`<strong>Possíveis trechos ausentes no revisado (${state.auditMetrics.missingHunks.length}):</strong><br>${examples}`);
       }
+      if (state.auditMetrics.addedHunks.length) {
+        alertItems.push(`<strong>Trechos presentes apenas no revisado (${state.auditMetrics.addedHunks.length}):</strong> podem ser instruções de gravação ou adições editoriais. Confira no comparador.`);
+      }
+      if (state.auditMetrics.discrepancies && !state.auditMetrics.missingHunks.length && !state.auditMetrics.addedHunks.length) {
+        alertItems.push(`<strong>Diferenças para revisar:</strong> ${state.auditMetrics.discrepancies} trecho(s) foram alterados entre os documentos. Veja os destaques no comparador.`);
+      }
+      if (reviewFindings.length) {
+        alertItems.push(`<strong>Verificações mecânicas no revisado:</strong><br>${reviewFindings.map(item => `• ${escapeHtml(item)}`).join('<br>')}`);
+      }
+      if (!alertItems.length) {
+        alertItems.push('Nenhuma omissão isolada ou anomalia mecânica evidente foi encontrada. A paginação não participa da comparação.');
+      }
+      alertItems.push('<span class="text-slate-400">A verificação mecânica não substitui um corretor ortográfico com dicionário.</span>');
+      alertText.innerHTML = alertItems.join('<br><br>');
+      const hasFindings = state.auditMetrics.discrepancies > 0 || reviewFindings.length > 0;
+      alertBox.classList.toggle('bg-rose-950/30', hasFindings);
+      alertBox.classList.toggle('border-rose-800/60', hasFindings);
+      alertBox.classList.toggle('bg-slate-900/60', !hasFindings);
+      alertBox.classList.toggle('border-slate-700', !hasFindings);
+      alertBox.querySelector('h4').classList.toggle('text-rose-300', hasFindings);
+      alertBox.querySelector('h4').classList.toggle('text-slate-200', !hasFindings);
+      alertBox.classList.remove('hidden');
+      return state.auditMetrics;
+    }
+
+    function inspectRevisedText(text) {
+      const normalized = normalizeAuditText(text);
+      const findings = [];
+      const placeholderPatterns = [
+        /\[(?:NOME(?:\s+DO\s+NARRADOR)?|ANO|ELENCO\s+DE\s+VOZ(?:\s*\/[^\]]*)?|PREENCHER[^\]]*)\]/gi,
+        /\b(?:TODO|TBD|FIXME|LOREM\s+IPSUM)\b/gi,
+        /\b(?:NOME\s+A\s+DEFINIR|A\s+PREENCHER)\b/gi
+      ];
+      for (const pattern of placeholderPatterns) {
+        const matches = [...normalized.matchAll(pattern)].map(match => match[0]);
+        if (matches.length) findings.push(`placeholder(s) não preenchido(s): ${[...new Set(matches)].slice(0, 4).join(', ')}`);
+      }
+
+      const repeatedWords = [...normalized.matchAll(/(?<![\p{L}])([\p{L}]{2,})\s+\1(?![\p{L}])/giu)].map(match => match[1]);
+      if (repeatedWords.length) findings.push(`palavra repetida em sequência: ${[...new Set(repeatedWords)].slice(0, 6).join(', ')}`);
+
+      if (/\s+[,;:!?]/u.test(normalized)) findings.push('espaço antes de vírgula, ponto e vírgula, dois-pontos ou pontuação final');
+      if (/(?:!!+|\?\?+|,,+|;;+|::+|\.{2}(?!\.))/u.test(normalized)) findings.push('pontuação duplicada ou sequência de pontos suspeita');
+
+      const paragraphs = normalized.split(/\n{2,}/).map(part => part.replace(/\s+/g, ' ').trim()).filter(part => part.length >= 80);
+      for (let i = 1; i < paragraphs.length; i++) {
+        if (paragraphs[i].toLocaleLowerCase('pt-BR') === paragraphs[i - 1].toLocaleLowerCase('pt-BR')) {
+          findings.push(`parágrafo duplicado: “${paragraphs[i].slice(0, 100)}${paragraphs[i].length > 100 ? '…' : ''}”`);
+          break;
+        }
+      }
+
+      const chapterNumbers = [...normalized.matchAll(/^\s*(?:CAP[IÍ]TULO|CAP\.?)\s*0*(\d{1,2})\b/gim)].map(match => Number(match[1]));
+      const chapterSet = [...new Set(chapterNumbers)].sort((a, b) => a - b);
+      const missingChapters = [];
+      for (let number = chapterSet[0]; number && number < chapterSet[chapterSet.length - 1]; number++) {
+        if (!chapterSet.includes(number)) missingChapters.push(number);
+      }
+      if (missingChapters.length) findings.push(`possível salto na sequência de capítulos: ${missingChapters.map(number => String(number).padStart(2, '0')).join(', ')}`);
+      return findings;
     }
 
     /**
@@ -2726,36 +2837,28 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         return;
       }
 
-      const isBeijo = state.currentPresetKey === 'beijo';
-
+      const audit = state.auditMetrics || { discrepancies: 0, changedWords: 0, totalWords: 0, missingHunks: [], addedHunks: [], reviewFindings: [] };
       content.innerHTML = `
         <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
           <h4 class="font-bold text-white text-sm mb-2 flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-brand-400"></span>
             1. Resumo da Obra & Matriz Auditada
           </h4>
-          <p><strong>Obra:</strong> ${isBeijo ? 'O Beijo da Mulher-Aranha — Manuel Puig (Tradução: Sérgio Molina / Posfácio: Patricio Pron)' : 'A Mercadoria Mais Preciosa — Jean-Claude Grumberg (Tradução: Rosa Freire d\'Aguiar)'}</p>
-          <p class="mt-1"><strong>Finalidade do Roteiro:</strong> Master de gravação para audiolivro / Audible Studios com guias de locução.</p>
-          <p class="mt-1"><strong>Extensão:</strong> ${state.docOrig.totalPages} págs. (Original Impresso) / ${state.docRev.totalPages} págs. (Revisado Gravado).</p>
+          <p><strong>PDF Original:</strong> ${escapeHtml(state.docOrig.name)} (${state.docOrig.totalPages} páginas)</p>
+          <p class="mt-1"><strong>PDF Revisado:</strong> ${escapeHtml(state.docRev.name)} (${state.docRev.totalPages} páginas)</p>
+          <p class="mt-1"><strong>Critério:</strong> comparação do conteúdo integral; a contagem de páginas não determina correspondência.</p>
         </div>
 
         <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
           <h4 class="font-bold text-rose-300 text-sm mb-2 flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
-            2. Auditoria Estrutural e Omissões de Sumário
+            2. Comparação integral do conteúdo
           </h4>
-          ${isBeijo ? `
-            <ul class="list-disc list-inside space-y-1.5 text-slate-300 leading-relaxed">
-              <li><strong class="text-rose-400">Capítulo 04 Omitido no Sumário de Gravação:</strong> Na página 3 do arquivo revisado, a tabela de capítulos salta de <code>CAP 03 - PÁG. 52</code> direto para <code>CAP 05 - PÁG. 97</code>. O Capítulo 4 existe no texto (pág. 75), mas foi esquecido no índice.</li>
-              <li><strong class="text-amber-400">Folha de Rosto Suprimida:</strong> A página 3 original contendo autor, tradutor, posfaciador e editora Todavia não foi incluída na abertura do revisado.</li>
-              <li><strong class="text-emerald-400">Posfácio Preservado:</strong> O posfácio de Patricio Pron está 100% preservado no revisado a partir da pág. 281.</li>
-            </ul>
-          ` : `
-            <ul class="list-disc list-inside space-y-1.5 text-slate-300 leading-relaxed">
-              <li><strong class="text-amber-400">Exclusões Gráficas:</strong> Pág. 1 (Falsa Folha), Pág. 77 (Ficha CIP) e Pág. 78 (Colofão) omitidas no revisado por pertencerem estritamente à gráfica impressa.</li>
-              <li><strong class="text-emerald-400">Texto Integral:</strong> Todos os 20 capítulos, o Epílogo e o Apêndice Histórico estão 100% idênticos.</li>
-            </ul>
-          `}
+          <ul class="list-disc list-inside space-y-1.5 text-slate-300 leading-relaxed">
+            <li>${audit.discrepancies} trecho(s) divergente(s) em ${audit.changedWords.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} palavra(s)/unidade(s) alterada(s).</li>
+            <li>${audit.missingHunks.length} possível(is) trecho(s) ausente(s) e ${audit.addedHunks.length} trecho(s) presente(s) apenas no revisado.</li>
+            <li>${audit.reviewFindings.length} alerta(s) mecânico(s) no revisado.</li>
+          </ul>
         </div>
 
         <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
@@ -2769,9 +2872,11 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
           <h4 class="font-bold text-purple-300 text-sm mb-2 flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span>
-            4. Análise do Termo "Livro" (Quebra de Quarta Parede)
+            4. Verificações mecânicas do revisado
           </h4>
-          <p>${isBeijo ? 'No miolo da obra o termo <strong>não é utilizado como autorreferência</strong> à história de Valentín e Molina (apenas no Posfácio crítico de Patricio Pron, onde o ensaísta refere-se à obra de Puig como livro/romance).' : 'Na narração da fábula a palavra não é usada autorreferencialmente, constando apenas nos créditos de áudio ("do livro A mercadoria mais preciosa").'}</p>
+          ${audit.reviewFindings.length
+            ? `<ul class="list-disc list-inside space-y-1.5 text-slate-300 leading-relaxed">${audit.reviewFindings.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+            : '<p>Nenhum placeholder, repetição ou problema mecânico evidente foi identificado. A ferramenta não faz correção ortográfica completa sem dicionário.</p>'}
         </div>
       `;
     }
@@ -2784,26 +2889,27 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         alertBox('Carregue os PDFs ou selecione um exemplo para exportar o laudo.');
         return;
       }
-      const isBeijo = state.currentPresetKey === 'beijo';
+      const audit = state.auditMetrics || { discrepancies: 0, changedWords: 0, totalWords: 0, missingHunks: [], addedHunks: [], reviewFindings: [] };
       const dateStr = new Date().toLocaleDateString('pt-BR');
 
       let md = `# LAUDO DE AUDITORIA EDITORIAL & QA - PRODUÇÃO DE AUDIOLIVRO\n\n`;
       md += `**Data da Auditoria:** ${dateStr}  \n`;
-      md += `**Obra Auditada:** ${isBeijo ? 'O Beijo da Mulher-Aranha (Manuel Puig)' : (state.currentPresetKey === 'quintas' ? 'As quintas que perdi (Jorge de Sena)' : 'A Mercadoria Mais Preciosa (Jean-Claude Grumberg)')}  \n`;
+      md += `**Obra/arquivo original:** ${state.docOrig.name}  \n`;
       md += `**PDF Original:** ${state.docOrig ? state.docOrig.name : 'N/A'} (${state.docOrig ? state.docOrig.totalPages : 0} páginas)  \n`;
       md += `**PDF Revisado (Roteiro):** ${state.docRev ? state.docRev.name : 'N/A'} (${state.docRev ? state.docRev.totalPages : 0} páginas)  \n`;
-      md += `**Conformidade QA:** 96.8% — APROVADO COM RESSALVA  \n\n`;
+      const qaScore = state.auditMetrics
+        ? Math.max(0, 100 - (state.auditMetrics.changedWords / Math.max(1, state.auditMetrics.totalWords)) * 100).toFixed(1)
+        : '—';
+      md += `**Conformidade QA:** ${qaScore}% — calculada sobre as palavras divergentes em relação ao texto original  \n\n`;
 
       md += `---\n\n`;
-      md += `## 1. RESUMO EXECUTIVO & DIAGNÓSTICO ESTRUTURAL\n\n`;
-      if (isBeijo) {
-        md += `* **Omissão Crítica no Sumário:** O Capítulo 04 consta no corpo da obra (Pág. 75), mas foi esquecido na tabela de gravação do sumário (Pág. 3).\n`;
-        md += `* **Folha de Rosto Suprimida:** A folha de créditos com autor, tradutor e editora foi omitida no roteiro do audiolivro.\n`;
-        md += `* **Posfácio Confirmado:** Texto integral de Patricio Pron preservado na íntegra a partir da Pág. 281.\n\n`;
-      } else {
-        md += `* **Exclusões Gráficas Normais:** Pág. 1 (Falsa Folha), Pág. 77 (Ficha CIP) e Pág. 78 (Colofão) omitidas no revisado.\n`;
-        md += `* **Texto Integral Preservado:** Todos os capítulos e apêndice histórico conferidos com sucesso.\n\n`;
-      }
+      md += `## 1. RESUMO DA COMPARAÇÃO DE CONTEÚDO\n\n`;
+      md += `* **Critério:** comparação do conteúdo integral, sem parear páginas. A diferença na contagem de páginas é apenas informativa.\n`;
+      md += `* **Trechos divergentes:** ${audit.discrepancies}; **palavras/unidades alteradas:** ${audit.changedWords.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}.\n`;
+      md += `* **Possíveis trechos ausentes no revisado:** ${audit.missingHunks.length}; **trechos só no revisado:** ${audit.addedHunks.length}.\n`;
+      md += `* **Alertas mecânicos no revisado:** ${audit.reviewFindings.length}.\n`;
+      audit.reviewFindings.forEach(item => { md += `  * ${item}\n`; });
+      md += `* A verificação mecânica não substitui um corretor ortográfico com dicionário.\n\n`;
 
       md += `## 2. GUIA FONÉTICO DE PRONÚNCIA PARA O NARRADOR\n\n`;
       md += `| Palavra / Nome | Transcrição Fonética Aproximada | Idioma | Pág. Revisado | Pág. Original |\n`;
@@ -3082,7 +3188,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         return;
       }
 
-      genState.phonetics.unshift({ word, ipa });
+      genState.phonetics.unshift({ word, ipa, source: 'manual' });
       wordInput.value = '';
       ipaInput.value = '';
       renderGenPhoneticsList();
@@ -3116,7 +3222,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
                 const word = item.word.trim();
                 const ipa = item.ipa.trim();
                 if (!genState.phonetics.some(p => p.word.toLowerCase() === word.toLowerCase())) {
-                  genState.phonetics.push({ word, ipa });
+                  genState.phonetics.push({ word, ipa, source: 'imported' });
                   added++;
                 }
               }
@@ -3175,6 +3281,12 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
     const LITERARY_PHONETICS_DICT = {
       // Autores, filósofos e figuras estrangeiras
       "stendhal": { ipa: "sten-DÁL", lang: "Francês" },
+      "dantian": { ipa: "dan-ti-ÉN", lang: "Chinês" },
+      "dantians": { ipa: "dan-ti-ÉNS", lang: "Chinês" },
+      "stanislav grof": { ipa: "STÁ-ni-slav GRÓF", lang: "Tcheco" },
+      "e. dehillerin": { ipa: "â də-i-le-RÃ", lang: "Francês" },
+      "sectio caesarea": { ipa: "SÉK-ti-o kai-SÁ-re-a", lang: "Latim" },
+      "you shoot from your hips": { ipa: "iú XÚT frâm iór HÍPS", lang: "Inglês (EUA)" },
       "baudelaire": { ipa: "bô-de-LÉR", lang: "Francês" },
       "kierkegaard": { ipa: "KIR-ke-gard", lang: "Dinamarquês/Alemão" },
       "rilke": { ipa: "RÍL-ke", lang: "Alemão" },
@@ -3416,7 +3528,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
     const COMMON_PT_WORDS = new Set([
       'álcool', 'alcool', 'alcoólico', 'alcoolico', 'alcoólica', 'alcoolica',
       'alcoolizado', 'alcoolizada', 'alcoolizados', 'alcoolizadas', 'alcoolizar', 'alcoolismo',
-      'cooperação', 'cooperacao', 'cooperar', 'cooperativa', 'cooperativo', 'cooperador',
+      'cooperação', 'cooperacao', 'cooperar', 'cooperativa', 'cooperativo', 'cooperador', 'presença',
       'coordenação', 'coordenacao', 'coordenar', 'coordenador', 'coordenadora',
       'voo', 'voos', 'enjoo', 'enjoos', 'perdoo', 'abençoo', 'moo', 'soo',
       'zoologia', 'zoologico', 'zoológico', 'zoológica', 'zoológicas',
@@ -3498,14 +3610,18 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         return;
       }
 
-      // Preserva termos já adicionados manualmente pelo usuário
-      const detected = [...(genState.phonetics || []).map(p => ({
-        word: p.word,
-        ipa: p.ipa,
-        lang: p.lang || 'Manual',
-        pagOrig: p.pagOrig || '1',
-        pagRev: p.pagRev || '1'
-      }))];
+      // Mantém termos manuais, importados ou curados; descarta resultados automáticos antigos
+      // para que uma nova análise aplique os filtros atuais e remova falsos positivos já exibidos.
+      const detected = (genState.phonetics || [])
+        .filter(p => ['manual', 'imported', 'curated'].includes(p.source))
+        .map(p => ({
+          word: p.word,
+          ipa: p.ipa,
+          lang: p.lang || (p.source === 'manual' ? 'Manual' : 'Importado'),
+          source: p.source,
+          pagOrig: p.pagOrig || '1',
+          pagRev: p.pagRev || '1'
+        }));
       const seenWords = new Set(detected.map(d => (d.word || '').toLowerCase()));
 
       // 1. Escanear dicionário literário/internacional verificado nas páginas do PDF Original
@@ -3516,10 +3632,11 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         if (isBlankPage(pageText)) continue;
 
         for (const term of sortedDictKeys) {
-          const regex = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\b`, 'i');
+          const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+          const regex = new RegExp(`(?<![\\p{L}\\p{N}])${escapedTerm}(?![\\p{L}\\p{N}])`, 'iu');
           const match = pageText.match(regex);
           if (match) {
-            const rawWord = match[0];
+            const rawWord = match[0].replace(/\s+/g, ' ');
             const lower = rawWord.toLowerCase();
             if (!seenWords.has(lower)) {
               seenWords.add(lower);
@@ -3535,12 +3652,64 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           }
         }
 
-        // 2. Escanear candidatos genuínos de nomes próprios ou vocábulos estrangeiros não triviais
-        // Exige: palavra capitalizada (Nome Próprio / Termo Formal) com pelo menos 4 letras
-        const candidateRegex = /\b[A-ZÀ-Ý][a-zà-ÿ]{3,}\b/g;
+        // 2. Coletar palavras estrangeiras e entidades multilíngues sem depender apenas do dicionário.
+        const automaticCandidates = new Map();
+        const singleWordRegex = /\b[A-ZÀ-Ý][a-zà-ÿ]{3,}\b/g;
         let wMatch;
-        while ((wMatch = candidateRegex.exec(pageText)) !== null) {
-          const candidate = wMatch[0];
+        while ((wMatch = singleWordRegex.exec(pageText)) !== null) {
+          automaticCandidates.set(wMatch[0].toLowerCase(), { text: wMatch[0], isNameSequence: false });
+        }
+
+        // Captura nomes em mais de uma palavra, partículas e iniciais (ex.: E. Dehillerin).
+        const nameSequenceRegex = /\b(?:[A-ZÀ-Ý]\.\s*)?[A-ZÀ-Ý][a-zà-ÿ]+(?:[-’'][A-ZÀ-Ý]?[a-zà-ÿ]+)*(?:\s+(?:(?:de|da|do|dos|das|van|von|del|della|la|le|du|di|der|den|e)|(?:[A-ZÀ-Ý][a-zà-ÿ]+(?:[-’'][A-ZÀ-Ý]?[a-zà-ÿ]+)*))){1,4}\b/g;
+        while ((wMatch = nameSequenceRegex.exec(pageText)) !== null) {
+          const candidate = wMatch[0].replace(/\s+/g, ' ').trim();
+          automaticCandidates.set(candidate.toLowerCase(), { text: candidate, isNameSequence: true });
+        }
+
+        // Detecta expressões estrangeiras pela combinação de palavras funcionais próprias de cada idioma.
+        // Só sugere uma janela curta quando aparecem pelo menos duas pistas do mesmo idioma.
+        const phraseAnchors = {
+          'Inglês': new Set(['you', 'your', 'yours', 'the', 'this', 'that', 'these', 'those', 'from', 'with', 'without', 'into', 'onto', 'through', 'they', 'them', 'their', 'was', 'were', 'been', 'have', 'has', 'had', 'does', 'did', 'would', 'could', 'should', 'whose', 'which', 'who']),
+          'Francês': new Set(['avec', 'dans', 'pour', 'sans', 'chez', 'être', 'été', 'sont', 'cette', 'celui', 'ceux', 'donc', 'ainsi', 'qui', 'quoi']),
+          'Alemão': new Set(['und', 'nicht', 'mit', 'für', 'sind', 'wird', 'wurde', 'auch', 'durch', 'dieser', 'diese', 'dieses', 'einer', 'eines']),
+          'Espanhol': new Set(['usted', 'ustedes', 'pero', 'hasta', 'aunque', 'ellos', 'ellas', 'están', 'estaba', 'será', 'quien']),
+          'Italiano': new Set(['sono', 'della', 'delle', 'degli', 'anche', 'perché', 'quindi', 'questo', 'questa', 'quello', 'quelle'])
+        };
+        const tokens = [...pageText.matchAll(/[\p{L}][\p{L}\p{M}'’.-]*/gu)];
+        for (let start = 0; start < tokens.length; start++) {
+          for (let length = 3; length <= 8 && start + length <= tokens.length; length++) {
+            const windowTokens = tokens.slice(start, start + length);
+            const windowText = pageText.slice(windowTokens[0].index, windowTokens.at(-1).index + windowTokens.at(-1)[0].length);
+            if (/[.!?;:\n]/.test(windowText)) break;
+            for (const [language, anchors] of Object.entries(phraseAnchors)) {
+              const normalizedTokens = windowTokens.map(token => token[0].toLowerCase());
+              const anchorCount = normalizedTokens.reduce((count, token) => count + (anchors.has(token) ? 1 : 0), 0);
+              const containsPortugueseFunctionWord = normalizedTokens.some(token =>
+                COMMON_PT_STOPWORDS.has(token) && !anchors.has(token)
+              );
+              const containsPortugueseWordForm = normalizedTokens.some(token =>
+                !anchors.has(token) && /(?:[aeiou]mos|aram|eram|iriam|avam|ando|endo|indo|adas?|idos?|idas?|ções?|mente|ou|ei|ava|ia|ias|imos)$/i.test(token)
+              );
+              const containsKnownPortugueseWord = normalizedTokens.some(token =>
+                !anchors.has(token) && (COMMON_PT_WORDS.has(token) || COMMON_BRAZILIAN_NAMES.has(token) || COMMON_ASSIMILATED_LOANWORDS.has(token))
+              );
+              if (anchorCount >= 2 && !containsPortugueseFunctionWord && !containsPortugueseWordForm && !containsKnownPortugueseWord) {
+                const key = windowText.toLowerCase();
+                const overlappingPhrase = [...automaticCandidates.entries()].find(([, item]) =>
+                  item.detectedLanguage && (item.text.toLowerCase().includes(key) || key.includes(item.text.toLowerCase()))
+                );
+                if (!overlappingPhrase || key.length > overlappingPhrase[1].text.length) {
+                  if (overlappingPhrase) automaticCandidates.delete(overlappingPhrase[0]);
+                  automaticCandidates.set(key, { text: windowText, isNameSequence: false, detectedLanguage: language });
+                }
+                break;
+              }
+            }
+          }
+        }
+
+        for (const { text: candidate, isNameSequence, detectedLanguage } of automaticCandidates.values()) {
           const candLower = candidate.toLowerCase();
 
           // Filtro 1: Se já foi catalogado, é stopword, nome comum luso-brasileiro, empréstimo comum ou palavra vernácula
@@ -3572,10 +3741,13 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           const isGerman = /(?:sch|tz\b|stein|berg|zweig|wald|mann\b|baum)\b/i.test(candidate);
           const isFrench = /(?:eau\b|eaux\b|gnon\b|gny\b|court\b|ville\b|d’[A-Z]|l’[A-Z])/i.test(candidate);
           const isNordicOrHungarian = /(?:csik|szent|halyi|gaard|sen\b|sson\b|qvist|strom)/i.test(candidate);
+          const isSpanish = /(?:ñ|ción\b|[áéíóú]n\b)/i.test(candidate);
           const hasForeignDiacritics = /[ōūǎǐǒǔøåæœłńśźżčšž]/i.test(candidate);
-          const hasUnusualClusters = /(?:cz|sz|rz|kh|dh|gh\b|cs|zs|pf|kn\b)/i.test(candidate);
+          const hasUnusualClusters = /(?:cz|sz|rz|kh|dh|gh\b|cs|zs|pf|kn\b|slav|\b[a-z]{3,}f\b)/i.test(candidate);
 
-          if (isSlavic || isGerman || isFrench || isNordicOrHungarian || hasForeignDiacritics || hasUnusualClusters) {
+          // Maiúsculas indicam nomes/títulos, mas não bastam para recomendar pronúncia.
+          // A sugestão exige padrão fonológico estrangeiro ou combinação de palavras funcionais de outro idioma.
+          if (detectedLanguage || isSlavic || isGerman || isFrench || isNordicOrHungarian || isSpanish || hasForeignDiacritics || hasUnusualClusters) {
             seenWords.add(candLower);
             const ipa = generateRuleBasedIpa(candidate);
             let lang = "Estrangeiro";
@@ -3583,6 +3755,8 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
             else if (isGerman) lang = "Alemão";
             else if (isFrench) lang = "Francês";
             else if (isNordicOrHungarian) lang = "Nórdico/Húngaro";
+            else if (isSpanish) lang = "Espanhol";
+            else if (detectedLanguage) lang = detectedLanguage;
 
             detected.push({
               word: candidate,
@@ -3597,7 +3771,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
       if (detected.length > 0) {
         // Atualiza estado do gerador (inline) e do auditor
-        genState.phonetics = detected.map(d => ({ word: d.word, ipa: d.ipa }));
+        genState.phonetics = detected.map(d => ({ word: d.word, ipa: d.ipa, source: d.source || 'automatic', lang: d.lang, pagOrig: d.pagOrig, pagRev: d.pagRev }));
         state.phonetics = detected;
 
         renderGenPhoneticsList();
@@ -3848,6 +4022,12 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         /^(?:[A-ZÁ-Ú0-9\s\:\–\—]{3,50})$/.test(cleanP);
     }
 
+    function correctKnownOcrArtifacts(text) {
+      return String(text || '')
+        .replace(/\btr~es\b/gi, match => match[0] === match[0].toUpperCase() ? 'Três' : 'três')
+        .replace(/\bparágafio\b/gi, match => match[0] === match[0].toUpperCase() ? 'Parágrafo' : 'parágrafo');
+    }
+
     function stripOriginalPageMarkers(text) {
       return String(text || '').replace(
         /-{0,3}\s*\[\s*P(?:[ÁA]G(?:INA)?)?\.?\s*\d+\s*\]\s*-{0,3}/gi,
@@ -3992,7 +4172,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           continue;
         }
 
-        let processedText = stripOriginalPageMarkers(p.text);
+        let processedText = correctKnownOcrArtifacts(stripOriginalPageMarkers(p.text));
 
         // Strip footnotes
         if (ruleFootnotes) {
@@ -4657,6 +4837,16 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       if (script.translator) txt += `Traduzido por ${script.translator}\n`;
       txt += `E narrado por ${script.narrator}\n\n`;
 
+      if (script.frontMatterPages && script.frontMatterPages.length) {
+        txt += `============================================================\n`;
+        txt += `FOLHAS DE ROSTO / CITAÇÕES DO ORIGINAL\n`;
+        txt += `============================================================\n\n`;
+        script.frontMatterPages.forEach((paragraphs, index) => {
+          txt += `--- FOLHA ${index + 1} ---\n\n`;
+          paragraphs.forEach(paragraph => { txt += `${paragraph}\n\n`; });
+        });
+      }
+
       txt += `============================================================\n`;
       txt += `CORPO DO LIVRO ADAPTADO (FLUXO CONTÍNUO POR CAPÍTULOS)\n`;
       txt += `============================================================\n\n`;
@@ -4698,7 +4888,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      alertBox('Roteiro baixado em formato TXT!');
+      alertBox('Texto revisado baixado em TXT, com as pronúncias e remoções selecionadas.');
     }
 
     /**
