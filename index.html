@@ -4733,6 +4733,8 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       const pageHeight = doc.internal.pageSize.getHeight(); // 297
       const margin = 25; // Authentic literary margins
       const contentWidth = pageWidth - (margin * 2); // 160mm
+      const bodyMargin = 47.5;
+      const bodyContentWidth = pageWidth - (bodyMargin * 2);
 
       // ==========================================
       // PÁGINA 1: COMO LER ESTE DOCUMENTO (Normas Oficiais Audible Studios)
@@ -4865,7 +4867,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       // Mantém a página de abertura exclusiva para os créditos iniciais.
       doc.addPage();
       runningPageNum++;
-      curY = 25;
+      curY = 48;
 
       function stampPageNumber(num) {
         doc.setFont('times', 'normal');
@@ -4878,51 +4880,22 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         stampPageNumber(runningPageNum);
         doc.addPage();
         runningPageNum++;
-        curY = 25;
+        curY = 48;
       }
 
-      function isStandaloneFrontMatterPage(paragraphs) {
-        const text = paragraphs.join(' ').replace(/\s+/g, ' ').trim();
-        if (!text || text.length > 700) return false;
-        const isDedication = /^Para\s+[\p{Lu}][\p{L}\p{M}]+(?:\s+[\p{Lu}][\p{L}\p{M}]+){0,2}\.\s*(?:Por .{1,150}[.!?])?$/u.test(text);
-        const hasQuote = /[“"].+[”"]/u.test(text);
-        const hasAttribution = /(?:—|–|-)\s*[\p{Lu}][\p{L}\p{M}'’. -]{1,90}$/u.test(text);
-        return isDedication || (hasQuote && hasAttribution);
-      }
+      const sourcePages = script.pages || [];
+      const pagesToRender = sourcePages.length
+        ? sourcePages.map(page => ({ paragraphs: extractAllBookParagraphs([page]) }))
+        : [{ paragraphs: script.allParagraphs || [] }];
+      let isFirstBodyPage = true;
 
-      // O texto comum flui entre páginas de origem para preencher cada página.
-      // Dedicatórias e epígrafes continuam isoladas, como no roteiro diagramado.
-      const renderSegments = [];
-      let flowingSourcePages = [];
-      const flushFlowingPages = () => {
-        if (!flowingSourcePages.length) return;
-        renderSegments.push({ type: 'flow', paragraphs: extractAllBookParagraphs(flowingSourcePages) });
-        flowingSourcePages = [];
-      };
-      for (const sourcePage of (script.pages || [])) {
-        const paragraphs = extractAllBookParagraphs([sourcePage]);
-        if (!paragraphs.length) continue;
-        if (isStandaloneFrontMatterPage(paragraphs)) {
-          flushFlowingPages();
-          renderSegments.push({ type: 'standalone', paragraphs });
-        } else {
-          flowingSourcePages.push(sourcePage);
-        }
-      }
-      flushFlowingPages();
-      if (!renderSegments.length && script.allParagraphs?.length) {
-        renderSegments.push({ type: 'flow', paragraphs: script.allParagraphs });
-      }
-
-      for (const segment of renderSegments) {
-        const pageParagraphs = segment.paragraphs || [];
+      for (const sourcePage of pagesToRender) {
+        const pageParagraphs = sourcePage.paragraphs || [];
         if (!pageParagraphs.length) continue;
-
-        if (segment.type === 'standalone' && curY > 25) startNextBodyPage();
-        const firstContentParagraph = stripOriginalPageMarkers(pageParagraphs[0] || '').trim();
-        if (segment.type === 'flow' && isChapterHeader(firstContentParagraph) && curY > 25) {
+        if (!isFirstBodyPage) {
           startNextBodyPage();
         }
+        isFirstBodyPage = false;
 
         for (let pIdx = 0; pIdx < pageParagraphs.length; pIdx++) {
         const paragraph = pageParagraphs[pIdx];
@@ -4931,7 +4904,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
         // Verifica se é cabeçalho de capítulo (número isolado, Capítulo X, Parte X, etc.)
         if (isChapterHeader(cleanP)) {
-          if (curY > 25) startNextBodyPage();
+          if (curY > 48) startNextBodyPage();
           if (/^\d{1,3}$/.test(cleanP)) {
             // Número do capítulo isolado (topo à direita, em negrito 18pt)
             doc.setFont('times', 'bold');
@@ -4956,7 +4929,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
             stampPageNumber(runningPageNum);
             doc.addPage();
             runningPageNum++;
-            curY = 25;
+            curY = 48;
           }
           doc.setFont('times', 'bold');
           doc.setFontSize(13);
@@ -4968,11 +4941,11 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
         // Parágrafo literário normal do miolo
         doc.setFont('times', 'normal');
-        doc.setFontSize(11.5);
+        doc.setFontSize(12.5);
         doc.setTextColor(30, 41, 59);
 
         const indentMm = 7;
-        const lineHeightMm = 5.2;
+        const lineHeightMm = 6.5;
         const words = cleanP.split(/\s+/);
         const lines = [];
         let currentLine = '';
@@ -4980,15 +4953,15 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
         for (const word of words) {
           const testLine = currentLine ? (currentLine + ' ' + word) : word;
-          const maxW = isFirstLine ? (contentWidth - indentMm) : contentWidth;
+          const maxW = isFirstLine ? (bodyContentWidth - indentMm) : bodyContentWidth;
           if (doc.getTextWidth(testLine) <= maxW) {
             currentLine = testLine;
           } else {
             if (currentLine) {
               lines.push({ text: currentLine, indent: isFirstLine ? indentMm : 0 });
               isFirstLine = false;
-              if (doc.getTextWidth(word) > contentWidth) {
-                doc.splitTextToSize(word, contentWidth).forEach(chunk => {
+              if (doc.getTextWidth(word) > bodyContentWidth) {
+                doc.splitTextToSize(word, bodyContentWidth).forEach(chunk => {
                   lines.push({ text: chunk, indent: 0 });
                 });
                 currentLine = '';
@@ -5016,9 +4989,9 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
             stampPageNumber(runningPageNum);
             doc.addPage();
             runningPageNum++;
-            curY = 25;
+            curY = 48;
             doc.setFont('times', 'normal');
-            doc.setFontSize(11.5);
+            doc.setFontSize(12.5);
             doc.setTextColor(30, 41, 59);
           }
           const isParagraphLastLine = lineIdx === lines.length - 1;
@@ -5028,7 +5001,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
             const gaps = wordsInLine.length - 1;
             const naturalWidth = doc.getTextWidth(renderedLine);
             const spaceWidth = doc.getTextWidth(' ');
-            const targetWidth = contentWidth - lineObj.indent;
+            const targetWidth = bodyContentWidth - lineObj.indent;
             const extraSpaces = gaps > 0
               ? Math.min(Math.max(0, Math.floor((targetWidth - naturalWidth) / spaceWidth)), gaps * 3)
               : 0;
@@ -5042,7 +5015,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
               }, '');
             }
           }
-          doc.text(renderedLine, margin + lineObj.indent, curY, { align: 'left' });
+          doc.text(renderedLine, bodyMargin + lineObj.indent, curY, { align: 'left' });
           curY += lineHeightMm;
         }
 
@@ -5050,7 +5023,6 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         curY += 2.5;
       }
 
-        if (segment.type === 'standalone') startNextBodyPage();
       }
 
       // Estampa o número da página na última página de texto do miolo
