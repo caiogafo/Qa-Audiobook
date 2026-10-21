@@ -2348,7 +2348,10 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
             const sampleViewport = samplePage.getViewport({ scale: 1.0 });
             if (splitPdfSpreadText(await samplePage.getTextContent(), sampleViewport, pageNum)) spreadHits++;
           }
-          spreadMode = spreadHits >= Math.max(3, Math.ceil(samplePages.length * 0.55));
+          // Some InDesign interiors alternate single pages with paired spreads;
+          // a 55% threshold misses those mixed layouts. Four clear spreads in a
+          // ten-page sample are enough to enable forced midpoint splitting.
+          spreadMode = spreadHits >= Math.max(3, Math.ceil(samplePages.length * 0.4));
         }
 
         for (let i = 1; i <= totalPages; i++) {
