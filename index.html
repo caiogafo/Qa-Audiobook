@@ -2402,7 +2402,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       document.getElementById('metric-pages').textContent = `${state.docOrig.totalPages} / ${state.docRev.totalPages}`;
 
       // 2. Diff computation
-      computeDiff(state.docOrig.fullText, state.docRev.fullText);
+      computeDiff(getAuditComparableText(state.docOrig), getAuditComparableText(state.docRev));
 
       // QA Score calculation
       const score = state.auditMetrics
@@ -2558,11 +2558,40 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       return state.auditMetrics;
     }
 
+    function getAuditComparablePages(doc) {
+      const pages = doc?.pages || [];
+      const repeatedHeaders = findRepeatedRunningHeaders(pages);
+      return pages.map(page => {
+        const withoutFolio = stripSourcePageFolio(page.text, page.pageNum, repeatedHeaders);
+        const withoutMetadata = stripRepeatedRunningHeaders(
+          cleanInDesignRunningMetadata(withoutFolio),
+          repeatedHeaders
+        );
+        return {
+          pageNum: page.pageNum,
+          text: normalizeAuditText(withoutMetadata).replace(/\s+/g, ' ').trim()
+        };
+      }).filter(page => page.text);
+    }
+
+    function getAuditComparableText(doc) {
+      const pages = getAuditComparablePages(doc);
+      if (Array.isArray(doc?.pages) && doc.pages.length) {
+        return pages.map(page => page.text).join(' ');
+      }
+      return normalizeAuditText(doc?.fullText || '').replace(/\s+/g, ' ').trim();
+    }
+
     function getAuditDifferenceRows() {
       if (!state.docOrig || !state.docRev) return [];
       const dmp = new diff_match_patch();
-      const original = normalizeAuditText(state.docOrig.fullText).replace(/\s+/g, ' ').trim();
-      const revised = normalizeAuditText(state.docRev.fullText).replace(/\s+/g, ' ').trim();
+      const originalPages = getAuditComparablePages(state.docOrig);
+      const revisedPages = getAuditComparablePages(state.docRev);
+      const comparableText = (doc, pages) => Array.isArray(doc?.pages) && doc.pages.length
+        ? pages.map(page => page.text).join(' ')
+        : normalizeAuditText(doc?.fullText || '').replace(/\s+/g, ' ').trim();
+      const original = comparableText(state.docOrig, originalPages);
+      const revised = comparableText(state.docRev, revisedPages);
       const diffs = dmp.diff_main(original, revised);
       dmp.diff_cleanupSemantic(diffs);
       const rows = [];
@@ -2583,14 +2612,13 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         return context || String(changedText || '').trim();
       };
 
-      const findPage = (doc, phrase) => {
-        const pages = doc?.pages || [];
+      const findPage = (pages, phrase) => {
         const target = normalizeAuditText(phrase).replace(/\s+/g, ' ').trim().toLocaleLowerCase('pt-BR');
         if (!target) return '';
         const targetWords = target.match(/[\p{L}\p{N}]{3,}/gu) || [];
         let best = { page: '', score: 0 };
         for (const page of pages) {
-          const text = normalizeAuditText(page.text).replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
+          const text = page.text.toLocaleLowerCase('pt-BR');
           if (text.includes(target)) return page.pageNum || '';
           const score = targetWords.reduce((sum, word) => sum + (text.includes(word) ? 1 : 0), 0);
           if (score > best.score) best = { page: page.pageNum || '', score };
@@ -2607,8 +2635,8 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           ? sentenceAt(revised, pending.revisedStart, pending.inserted)
           : '';
         const target = originalSentence || revisedSentence || pending.removed || pending.inserted;
-        const originalPage = findPage(state.docOrig, originalSentence || pending.removed);
-        const revisedPage = findPage(state.docRev, revisedSentence || pending.inserted);
+        const originalPage = findPage(originalPages, originalSentence || pending.removed);
+        const revisedPage = findPage(revisedPages, revisedSentence || pending.inserted);
         const pageLabel = [
           originalPage ? `Original: ${originalPage}` : '',
           revisedPage ? `Revisado: ${revisedPage}` : ''
@@ -2619,17 +2647,25 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         ].filter(Boolean).join('\n');
         let solution;
         const oldLooksLikeNote = /\b(?:nota(?:\s+de\s+rodap[eé])?|rodap[eé]|nota\s+do\s+(?:autor|tradutor|editor))\b/i.test(pending.removed);
-        const revisedAddsPronunciation = /[\p{L}][^\n]{0,45}\[[^\]]{2,}\]/u.test(revisedSentence) && !/\[[^\]]{2,}\]/.test(originalSentence);
+        const insertedAnnotation = pending.inserted.match(/\[([^\]\r\n]{3,70})\]/u)?.[1] || '';
+        const pronunciationContext = pending.removed.trim() || originalSentence || revisedSentence;
+        const revisedAddsPronunciation = Boolean(insertedAnnotation) &&
+          /[\p{Ll}].*[\p{Lu}]|[\p{Lu}].*[\p{Ll}]|-/u.test(insertedAnnotation) &&
+          /[\p{L}]/u.test(pronunciationContext);
         if (revisedSentence && revisedAddsPronunciation) {
-          solution = `Manter a pronúncia adicionada no roteiro: ${revisedSentence}`;
+          solution = `Pronúncia adicionada: manter a forma entre colchetes. Trecho corrigido: ${revisedSentence}`;
         } else if (oldLooksLikeNote) {
-          solution = `Remover a nota do texto narrado. Trecho revisado a manter: ${revisedSentence || originalSentence}`;
+          solution = `Remover a nota do texto narrado. Trecho a manter: ${revisedSentence || originalSentence}`;
         } else if (originalSentence && revisedSentence) {
-          solution = `Usar o trecho revisado: ${revisedSentence}`;
+          solution = `Correção de texto: substituir “${pending.removed.trim()}” por “${pending.inserted.trim()}”. Trecho corrigido: ${revisedSentence}`;
         } else if (originalSentence && !revisedSentence) {
-          solution = `Confirmar a remoção. Se o trecho deve permanecer, restaurar: ${originalSentence}`;
+          const removedNoteLike = /^\s*(?:\d{1,2}[.)]|[*†‡])\s+/.test(pending.removed) ||
+            /\b(?:N\.[TEA]\.|nota(?:\s+de\s+rodap[eé])?|rodap[eé])\b/i.test(pending.removed);
+          solution = removedNoteLike
+            ? `Remover a nota editorial do texto narrado. Trecho relacionado: ${originalSentence}`
+            : `Remoção de conteúdo: confirmar se o trecho deve ser omitido. Se não, restaurar: ${originalSentence}`;
         } else {
-          solution = `Confirmar a inclusão no revisado: ${revisedSentence || target}`;
+          solution = `Adição no revisado: manter o trecho incluído. Trecho final: ${revisedSentence || target}`;
         }
         rows.push({ page: pageLabel, passage: location || target, solution });
         pending = null;
@@ -2686,7 +2722,12 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         || genState.generatedDoc?.title
         || inferBookTitleFromDocument(state.docOrig, state.docOrig.name)
         || state.docOrig.name.replace(/\.pdf$/i, '');
-      const safeTitle = workTitle.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+      const safeTitle = workTitle
+        .replace(/\bINDD(?=[A-ZÀ-Ý])/gi, '')
+        .replace(/(?:miolo\d*\.indd|\.indd)\b/gi, '')
+        .replace(/[\\/:*?"<>|]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       XLSX.writeFile(workbook, `Revisão texto ${safeTitle}.xlsx`);
       alertBox(`Planilha gerada: ${rows.length} diferença(s) para revisar.`);
     }
