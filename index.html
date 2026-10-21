@@ -2260,31 +2260,44 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       return cleanedParas.join('\n\n');
     }
 
-    // Some print PDFs store two facing book pages on one landscape PDF page.
-    // Split only when substantial text is present on both sides of the gutter.
+    // Some print PDFs store two facing book pages on one physical PDF page.
+    // Detect the blank center gutter from text geometry, not baseline alignment:
+    // InDesign PDFs can give the two facing pages slightly different baselines.
     function splitPdfSpreadText(textContent, viewport, sourcePageNum) {
       if (!textContent?.items?.length || !viewport?.width) return null;
       const midpoint = viewport.width / 2;
       const leftItems = [];
       const rightItems = [];
-      const rows = new Map();
+      let totalChars = 0;
+      let leftChars = 0;
+      let rightChars = 0;
+      let centerBandChars = 0;
+      const gutterHalfWidth = viewport.width * 0.025;
       for (const item of textContent.items) {
-        if (!(item.str || '').trim()) continue;
-        const centerX = item.transform[4] + (item.width || 0) / 2;
-        (centerX < midpoint ? leftItems : rightItems).push(item);
-        const baseline = Math.round(item.transform[5] / 2) * 2;
-        if (!rows.has(baseline)) rows.set(baseline, []);
-        rows.get(baseline).push(item);
+        const str = item.str || '';
+        if (!str.trim()) continue;
+        const x = item.transform[4];
+        const width = Math.max(0, item.width || 0);
+        const right = x + width;
+        const centerX = x + width / 2;
+        const chars = str.replace(/\s/g, '').length;
+        totalChars += chars;
+        if (centerX < midpoint) {
+          leftItems.push(item);
+          leftChars += chars;
+        } else {
+          rightItems.push(item);
+          rightChars += chars;
+        }
+        const overlap = Math.max(0, Math.min(right, midpoint + gutterHalfWidth) - Math.max(x, midpoint - gutterHalfWidth));
+        if (width > 0) centerBandChars += chars * overlap / width;
       }
-      const clearGutterRows = [...rows.values()].filter(row => {
-        const left = row.filter(item => item.transform[4] + (item.width || 0) / 2 < midpoint);
-        const right = row.filter(item => item.transform[4] + (item.width || 0) / 2 >= midpoint);
-        if (!left.length || !right.length) return false;
-        const leftEdge = Math.max(...left.map(item => item.transform[4] + (item.width || 0)));
-        const rightEdge = Math.min(...right.map(item => item.transform[4]));
-        return rightEdge - leftEdge >= 12;
-      }).length;
-      if (clearGutterRows < 8 || clearGutterRows / Math.max(rows.size, 1) < 0.25) return null;
+      const leftShare = leftChars / Math.max(totalChars, 1);
+      const rightShare = rightChars / Math.max(totalChars, 1);
+      const centerBandShare = centerBandChars / Math.max(totalChars, 1);
+      // Require substantial text in both page areas and a genuinely empty gutter.
+      // This avoids splitting ordinary single-column portrait pages at the midpoint.
+      if (leftChars < 120 || rightChars < 120 || leftShare < 0.15 || rightShare < 0.15 || centerBandShare > 0.04) return null;
       const leftText = reconstructPdfPageText({ ...textContent, items: leftItems }, viewport).trim();
       const rightText = reconstructPdfPageText({ ...textContent, items: rightItems }, viewport).trim();
       if (leftText.length < 120 || rightText.length < 120) return null;
