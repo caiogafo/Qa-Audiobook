@@ -1803,6 +1803,25 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       generatedDoc: null
     };
 
+    // Keep object URLs alive for the browser's full download/retry lifecycle.
+    const activeDownloadUrls = new Set();
+    window.addEventListener('pagehide', () => {
+      activeDownloadUrls.forEach(url => URL.revokeObjectURL(url));
+      activeDownloadUrls.clear();
+    });
+
+    function downloadBlobFile(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      activeDownloadUrls.add(url);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+
     // DOM Ready Initialization - Opens clean without preloaded documents
     document.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
@@ -2638,14 +2657,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         return;
       }
       if (format === 'pdf' && state.docRev.sourceFile instanceof Blob) {
-        const url = URL.createObjectURL(state.docRev.sourceFile);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = state.docRev.name || state.docRev.sourceFile.name || 'revisado.pdf';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        downloadBlobFile(state.docRev.sourceFile, state.docRev.name || state.docRev.sourceFile.name || 'revisado.pdf');
         alertBox('PDF revisado baixado preservando o arquivo, a paginação e a formatação originais.');
         return;
       }
@@ -3125,14 +3137,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       md += `\n---\n*Relatório gerado automaticamente pela ferramenta QA Editorial & Auditoria de Audiolivros.*`;
 
       const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `laudo_auditoria_editorial_${state.currentPresetKey || 'personalizado'}_${Date.now()}.md`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlobFile(blob, `laudo_auditoria_editorial_${state.currentPresetKey || 'personalizado'}_${Date.now()}.md`);
 
       alertBox('Laudo em Markdown baixado com sucesso!');
     }
@@ -5068,7 +5073,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
       // Save PDF
       const safeTitle = script.title.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 35);
-      doc.save(`${safeTitle}_Roteiro_Revisado_Audible.pdf`);
+      downloadBlobFile(doc.output('blob'), `${safeTitle}_Roteiro_Revisado_Audible.pdf`);
       alertBox('✓ PDF Revisado gerado com formatação de livro e baixado com sucesso!');
     }
 
@@ -5177,14 +5182,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children: paragraphs }]
         });
         const blob = await Packer.toBlob(wordDocument);
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${(script.title || 'roteiro').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 35)}_Roteiro_Revisado_Audible.docx`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        downloadBlobFile(blob, `${(script.title || 'roteiro').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 35)}_Roteiro_Revisado_Audible.docx`);
         alertBox('✓ DOCX editável gerado e baixado com sucesso!');
       } catch (error) {
         console.error('Falha ao gerar DOCX:', error);
@@ -5283,14 +5281,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       txt += `Audible Studios é uma divisão da Audible, Inc.\n`;
 
       const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${script.title.replace(/\s+/g, '_')}_roteiro_revisado.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlobFile(blob, `${script.title.replace(/\s+/g, '_')}_roteiro_revisado.txt`);
       alertBox('Texto revisado baixado em TXT, com as pronúncias e remoções selecionadas.');
     }
 
