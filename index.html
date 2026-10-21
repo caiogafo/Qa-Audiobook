@@ -2260,6 +2260,40 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       return cleanedParas.join('\n\n');
     }
 
+    // Some print PDFs store two facing book pages on one landscape PDF page.
+    // Split only when substantial text is present on both sides of the gutter.
+    function splitPdfSpreadText(textContent, viewport, sourcePageNum) {
+      if (!textContent?.items?.length || !viewport?.width) return null;
+      const midpoint = viewport.width / 2;
+      const leftItems = [];
+      const rightItems = [];
+      const rows = new Map();
+      for (const item of textContent.items) {
+        if (!(item.str || '').trim()) continue;
+        const centerX = item.transform[4] + (item.width || 0) / 2;
+        (centerX < midpoint ? leftItems : rightItems).push(item);
+        const baseline = Math.round(item.transform[5] / 2) * 2;
+        if (!rows.has(baseline)) rows.set(baseline, []);
+        rows.get(baseline).push(item);
+      }
+      const clearGutterRows = [...rows.values()].filter(row => {
+        const left = row.filter(item => item.transform[4] + (item.width || 0) / 2 < midpoint);
+        const right = row.filter(item => item.transform[4] + (item.width || 0) / 2 >= midpoint);
+        if (!left.length || !right.length) return false;
+        const leftEdge = Math.max(...left.map(item => item.transform[4] + (item.width || 0)));
+        const rightEdge = Math.min(...right.map(item => item.transform[4]));
+        return rightEdge - leftEdge >= 12;
+      }).length;
+      if (clearGutterRows < 8 || clearGutterRows / Math.max(rows.size, 1) < 0.25) return null;
+      const leftText = reconstructPdfPageText({ ...textContent, items: leftItems }, viewport).trim();
+      const rightText = reconstructPdfPageText({ ...textContent, items: rightItems }, viewport).trim();
+      if (leftText.length < 120 || rightText.length < 120) return null;
+      return [
+        { pageNum: null, sourcePageNum, sourceSide: 'left', text: leftText },
+        { pageNum: null, sourcePageNum, sourceSide: 'right', text: rightText }
+      ];
+    }
+
     /**
      * PDF.js Extractor Engine
      */
@@ -2276,6 +2310,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const totalPages = pdf.numPages;
         const pages = [];
+        const bookPages = [];
         let fullText = '';
 
         for (let i = 1; i <= totalPages; i++) {
@@ -2289,6 +2324,13 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
             text: pageText.trim()
           });
 
+          const spread = type === 'orig' ? splitPdfSpreadText(textContent, viewport, i) : null;
+          if (spread) {
+            bookPages.push(...spread);
+          } else {
+            bookPages.push({ pageNum: null, sourcePageNum: i, sourceSide: 'single', text: pageText.trim() });
+          }
+
           fullText += `[Pág ${i}] ${pageText}\n\n`;
 
           const progress = Math.round((i / totalPages) * 100);
@@ -2297,6 +2339,10 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           document.getElementById(labelId).textContent = `Extraindo página ${i} de ${totalPages}...`;
         }
 
+        // Sequential logical page markers let the editor and renderer retain
+        // the original book-page boundaries while audit data stays physical-PDF based.
+        bookPages.forEach((page, index) => { page.pageNum = index + 1; });
+
         document.getElementById(labelId).textContent = `Extração concluída: ${totalPages} páginas.`;
 
         return {
@@ -2304,6 +2350,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           size: file.size,
           totalPages: totalPages,
           pages: pages,
+          bookPages: bookPages,
           fullText: fullText
         };
       } catch (err) {
@@ -4157,8 +4204,9 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       const editor = document.getElementById('genOrigTextEditor');
       if (!editor) return;
       let formatted = '';
-      if (docOrPages && docOrPages.pages && docOrPages.pages.length > 0) {
-        formatted = docOrPages.pages.map(p => `--- [PÁGINA ${p.pageNum}] ---\n${p.text}`).join('\n\n');
+      const editorPages = docOrPages?.bookPages?.length ? docOrPages.bookPages : docOrPages?.pages;
+      if (editorPages && editorPages.length > 0) {
+        formatted = editorPages.map((p, idx) => `--- [PÁGINA ${p.pageNum || (idx + 1)}] ---\n${p.text}`).join('\n\n');
       } else if (Array.isArray(docOrPages)) {
         formatted = docOrPages.map((p, idx) => `--- [PÁGINA ${p.pageNum || (idx + 1)}] ---\n${p.text}`).join('\n\n');
       } else if (typeof docOrPages === 'string') {
@@ -4172,9 +4220,9 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
      * Restore original PDF extraction into the editor
      */
     function restoreEditorFromOriginalPdf() {
-      if (state.docOrig && state.docOrig.pages && state.docOrig.pages.length > 0) {
+      if (state.docOrig && (state.docOrig.bookPages?.length || state.docOrig.pages?.length)) {
         populateOrigTextEditor(state.docOrig);
-        alertBox(`✓ ${state.docOrig.pages.length} páginas restauradas do PDF Original para o editor.`);
+        alertBox(`✓ ${state.docOrig.bookPages?.length || state.docOrig.pages.length} páginas restauradas do PDF Original para o editor.`);
       } else if (state.currentPresetKey && PRESETS[state.currentPresetKey]) {
         populateOrigTextEditor(PRESETS[state.currentPresetKey].pagesOrig);
         alertBox('✓ Texto da amostra restaurado no editor.');
@@ -4423,7 +4471,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       if (editorText.length > 0) {
         rawPages = parsePagesFromEditorText(editorText);
       } else if (state.docOrig && state.docOrig.pages && state.docOrig.pages.length > 0) {
-        rawPages = state.docOrig.pages;
+        rawPages = state.docOrig.bookPages?.length ? state.docOrig.bookPages : state.docOrig.pages;
         populateOrigTextEditor(state.docOrig);
       } else if (state.currentPresetKey && PRESETS[state.currentPresetKey]) {
         rawPages = PRESETS[state.currentPresetKey].pagesOrig || [];
