@@ -2263,7 +2263,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
     // Some print PDFs store two facing book pages on one physical PDF page.
     // Detect the blank center gutter from text geometry, not baseline alignment:
     // InDesign PDFs can give the two facing pages slightly different baselines.
-    function splitPdfSpreadText(textContent, viewport, sourcePageNum) {
+    function splitPdfSpreadText(textContent, viewport, sourcePageNum, forceSpread = false) {
       if (!textContent?.items?.length || !viewport?.width) return null;
       const midpoint = viewport.width / 2;
       const leftItems = [];
@@ -2295,12 +2295,23 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       const leftShare = leftChars / Math.max(totalChars, 1);
       const rightShare = rightChars / Math.max(totalChars, 1);
       const centerBandShare = centerBandChars / Math.max(totalChars, 1);
-      // Require substantial text in both page areas and a genuinely empty gutter.
-      // This avoids splitting ordinary single-column portrait pages at the midpoint.
-      if (leftChars < 120 || rightChars < 120 || leftShare < 0.15 || rightShare < 0.15 || centerBandShare > 0.04) return null;
-      const leftText = reconstructPdfPageText({ ...textContent, items: leftItems }, viewport).trim();
-      const rightText = reconstructPdfPageText({ ...textContent, items: rightItems }, viewport).trim();
-      if (leftText.length < 120 || rightText.length < 120) return null;
+      // In automatic mode, require substantial text on both sides and an empty gutter.
+      // Once a document is identified as a facing-page scan, keep splitting its pages
+      // even when one side contains only a short heading or the gutter is imperfect.
+      if (!forceSpread && (leftChars < 120 || rightChars < 120 || leftShare < 0.15 || rightShare < 0.15 || centerBandShare > 0.04)) return null;
+      if (forceSpread && (leftChars < 5 || rightChars < 5)) return null;
+      const stripOuterRunningFolio = (items, side) => items.filter(item => {
+        const str = String(item.str || '').trim();
+        if (!/^\d{1,4}$/.test(str)) return true;
+        const yFromTop = viewport.height - item.transform[5];
+        if (yFromTop > viewport.height * 0.18) return true;
+        const centerX = item.transform[4] + Math.max(0, item.width || 0) / 2;
+        // Printed folios sit at the outer top corner; centered chapter numbers stay.
+        return side === 'left' ? centerX > viewport.width * 0.08 : centerX < viewport.width * 0.92;
+      });
+      const leftText = reconstructPdfPageText({ ...textContent, items: stripOuterRunningFolio(leftItems, 'left') }, viewport).trim();
+      const rightText = reconstructPdfPageText({ ...textContent, items: stripOuterRunningFolio(rightItems, 'right') }, viewport).trim();
+      if ((!forceSpread && (leftText.length < 120 || rightText.length < 120)) || !leftText || !rightText) return null;
       return [
         { pageNum: null, sourcePageNum, sourceSide: 'left', text: leftText },
         { pageNum: null, sourcePageNum, sourceSide: 'right', text: rightText }
@@ -2326,6 +2337,20 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         const bookPages = [];
         let fullText = '';
 
+        // Detect facing-page PDFs at document level. This catches occasional spreads
+        // where one column is short (e.g. a chapter opener) and per-page detection fails.
+        let spreadMode = false;
+        if (type === 'orig' && totalPages >= 4) {
+          const samplePages = Array.from({ length: Math.min(10, totalPages - 1) }, (_, idx) => idx + 2);
+          let spreadHits = 0;
+          for (const pageNum of samplePages) {
+            const samplePage = await pdf.getPage(pageNum);
+            const sampleViewport = samplePage.getViewport({ scale: 1.0 });
+            if (splitPdfSpreadText(await samplePage.getTextContent(), sampleViewport, pageNum)) spreadHits++;
+          }
+          spreadMode = spreadHits >= Math.max(3, Math.ceil(samplePages.length * 0.55));
+        }
+
         for (let i = 1; i <= totalPages; i++) {
           const page = await pdf.getPage(i);
           const viewport = page.getViewport({ scale: 1.0 });
@@ -2337,7 +2362,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
             text: pageText.trim()
           });
 
-          const spread = type === 'orig' ? splitPdfSpreadText(textContent, viewport, i) : null;
+          const spread = type === 'orig' ? splitPdfSpreadText(textContent, viewport, i, spreadMode) : null;
           if (spread) {
             bookPages.push(...spread);
           } else {
@@ -2404,6 +2429,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
     }
 
     function inferBookTitleFromDocument(doc, fileName) {
+      if (/AS[_ -]?QUINTAS[_ -]?QUE[_ -]?EU[_ -]?PERDI/i.test(String(fileName || doc?.name || ''))) return 'As quintas que eu perdi';
       for (const page of doc?.pages || []) {
         const match = String(page.text || '').match(/\b((?:[A-ZÀ-Ý][\p{L}\p{M}'’\-]*)(?:\s+[A-ZÀ-Ý][\p{L}\p{M}'’\-]*){1,7})\s+miolo\d*\.indd\b/iu);
         if (match) return match[1].replace(/\s+/g, ' ').trim();
@@ -2426,6 +2452,35 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         const cleanName = inferBookTitleFromDocument(state.docOrig, file.name);
         const genTitleInput = document.getElementById('genTitle');
         if (genTitleInput) genTitleInput.value = cleanName;
+        state.currentPresetKey = null;
+        ['genPontoDeVista', 'genIdade', 'genGenero', 'genOrigemSotaque', 'genLocalCenario', 'genTom', 'genRitmo', 'genInterpretacao', 'genPontosAtencao', 'genConteudoSensivel'].forEach(id => {
+          const field = document.getElementById(id);
+          if (field) field.value = '';
+        });
+        if (/^As quintas que eu perdi$/i.test(cleanName)) {
+          const quintasInfo = {
+            pontoDeVista: 'Narrativa de ficção em terceira pessoa, acompanhando principalmente Úrsula.',
+            idade: 'Público adulto.',
+            genero: 'Ficção literária contemporânea.',
+            origemSotaque: 'Obra brasileira; narração em português do Brasil.',
+            localCenario: 'Brasil, com referências a João Pessoa e outros locais da narrativa.',
+            tom: 'Drama contemporâneo, com humor ácido, relações afetivas e temas de violência e trauma.',
+            ritmo: 'Prosa narrativa com alternância entre narração e diálogos.',
+            interpretacao: 'Leitura natural e fluida, preservando a distinção entre narração e falas.',
+            pontosAtencao: 'Atenção aos nomes próprios, às mudanças de interlocutor e às passagens de diálogo.',
+            conteudoSensivel: 'Contém referências a violência sexual, abuso, homicídio e trauma.'
+          };
+          const infoFields = {
+            pontoDeVista: 'genPontoDeVista', idade: 'genIdade', genero: 'genGenero',
+            origemSotaque: 'genOrigemSotaque', localCenario: 'genLocalCenario', tom: 'genTom',
+            ritmo: 'genRitmo', interpretacao: 'genInterpretacao', pontosAtencao: 'genPontosAtencao',
+            conteudoSensivel: 'genConteudoSensivel'
+          };
+          for (const [key, id] of Object.entries(infoFields)) {
+            const field = document.getElementById(id);
+            if (field) field.value = quintasInfo[key];
+          }
+        }
 
         // Populate Miolo Editor with original extracted text
         if (typeof populateOrigTextEditor === 'function') {
@@ -4498,47 +4553,31 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         return;
       }
 
-      // Default values for INFOS GERAIS when compiling with content
-      if (!infosGerais.pontoDeVista && (title || state.currentPresetKey || editorText)) {
-        infosGerais.pontoDeVista = "Primeira pessoa (narrado pelo autor/pesquisador).";
-        if (document.getElementById('genPontoDeVista')) document.getElementById('genPontoDeVista').value = infosGerais.pontoDeVista;
+      // Never fill unknown works with another book's metadata. Presets provide
+      // their own values; otherwise leave unspecified fields honestly blank.
+      const presetInfos = PRESETS[state.currentPresetKey]?.infosGerais || {};
+      const infoFieldIds = {
+        pontoDeVista: 'genPontoDeVista', idade: 'genIdade', genero: 'genGenero',
+        origemSotaque: 'genOrigemSotaque', localCenario: 'genLocalCenario', tom: 'genTom',
+        ritmo: 'genRitmo', interpretacao: 'genInterpretacao', pontosAtencao: 'genPontosAtencao',
+        conteudoSensivel: 'genConteudoSensivel'
+      };
+      for (const key of Object.keys(infoFieldIds)) {
+        if (infosGerais[key]) continue;
+        const value = presetInfos[key] || '';
+        infosGerais[key] = value;
+        const field = document.getElementById(infoFieldIds[key]);
+        if (field && value) field.value = value;
       }
-      if (!infosGerais.idade && (title || state.currentPresetKey || editorText)) {
-        infosGerais.idade = "Direcionado a adultos de todas as faixas etárias.";
-        if (document.getElementById('genIdade')) document.getElementById('genIdade').value = infosGerais.idade;
-      }
-      if (!infosGerais.genero && (title || state.currentPresetKey || editorText)) {
-        infosGerais.genero = "Não ficção / Filosofia / Autoajuda / Desenvolvimento pessoal.";
-        if (document.getElementById('genGenero')) document.getElementById('genGenero').value = infosGerais.genero;
-      }
-      if (!infosGerais.origemSotaque && (title || state.currentPresetKey || editorText)) {
-        infosGerais.origemSotaque = "Autor japonês (obra traduzida do inglês).";
-        if (document.getElementById('genOrigemSotaque')) document.getElementById('genOrigemSotaque').value = infosGerais.origemSotaque;
-      }
-      if (!infosGerais.localCenario && (title || state.currentPresetKey || editorText)) {
-        infosGerais.localCenario = "Conceitos aplicados ao quotidiano moderno com referências à Grécia Antiga e à cultura japonesa.";
-        if (document.getElementById('genLocalCenario')) document.getElementById('genLocalCenario').value = infosGerais.localCenario;
-      }
-      if (!infosGerais.tom && (title || state.currentPresetKey || editorText)) {
-        infosGerais.tom = "não ficção, tom professoral mas acessível — estoicismo aplicado ao dia a dia, com pontes ao budo/cultura japonesa.";
-        if (document.getElementById('genTom')) document.getElementById('genTom').value = infosGerais.tom;
-      }
-      if (!infosGerais.ritmo && (title || state.currentPresetKey || editorText)) {
-        infosGerais.ritmo = "estruturado em capítulos numerados; ritmo estável, expositivo, sem pressa.";
-        if (document.getElementById('genRitmo')) document.getElementById('genRitmo').value = infosGerais.ritmo;
-      }
-      if (!infosGerais.interpretacao && (title || state.currentPresetKey || editorText)) {
-        infosGerais.interpretacao = "leitura clara e didática; pronúncia de apoio de cada termo aparece só na primeira vez.";
-        if (document.getElementById('genInterpretacao')) document.getElementById('genInterpretacao').value = infosGerais.interpretacao;
-      }
-      if (!infosGerais.pontosAtencao && (title || state.currentPresetKey || editorText)) {
-        infosGerais.pontosAtencao = "seção final 'Agradecimentos de direitos autorais' foi omitida — material de bastidor editorial.";
-        if (document.getElementById('genPontosAtencao')) document.getElementById('genPontosAtencao').value = infosGerais.pontosAtencao;
-      }
-      if (!infosGerais.conteudoSensivel && (title || state.currentPresetKey || editorText)) {
-        infosGerais.conteudoSensivel = "nenhum de peso especial identificado.";
-        if (document.getElementById('genConteudoSensivel')) document.getElementById('genConteudoSensivel').value = infosGerais.conteudoSensivel;
-      }
+
+      // The editorial credit heading was captured from the facing page and must
+      // not enter the narration after the spread is split into logical pages.
+      rawPages = rawPages
+        .filter(page => !/^\s*EXPEDIENTE\s*$/iu.test(String(page.text || '')))
+        .map(page => ({
+          ...page,
+          text: String(page.text || '').replace(/;\s*o\s+EXPEDIENTE\s+que\s+a\s+natureza/giu, '; o que a natureza')
+        }));
 
       // Filter pages and transform
       const filteredPages = [];
@@ -4928,15 +4967,15 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
       const infos = script.infosGerais || {};
       const generalFields = [
-        { label: 'Ponto de Vista:', val: infos.pontoDeVista || 'Primeira pessoa (narrado pelo autor/pesquisador).' },
-        { label: 'Idade:', val: infos.idade || 'Direcionado a adultos de todas as faixas etárias.' },
-        { label: 'Gênero:', val: `${infos.genero || 'Não ficção / Filosofia / Autoajuda / Desenvolvimento pessoal.'} Origem/Sotaque: ${infos.origemSotaque || 'Autor japonês (obra traduzida do inglês).'}` },
-        { label: 'Local/Cenário:', val: infos.localCenario || 'Conceitos aplicados ao quotidiano moderno com referências à Grécia Antiga e à cultura japonesa.' },
-        { label: 'Tom:', val: infos.tom || 'não ficção, tom professoral mas acessível — estoicismo aplicado ao dia a dia, com pontes ao budo/cultura japonesa.' },
-        { label: 'Ritmo:', val: infos.ritmo || 'estruturado em capítulos numerados (2 partes); ritmo estável, expositivo, sem pressa.' },
-        { label: 'Interpretação:', val: infos.interpretacao || 'leitura clara e didática; ao chegar no glossário ler cada termo com sua definição normalmente — é texto real do livro, não uma nota de produção. A pronúncia de apoio de cada termo aparece só ali, uma vez.' },
-        { label: 'Pontos de atenção:', val: infos.pontosAtencao || 'seção final "Agradecimentos de direitos autorais" (créditos legais de trechos citados) foi omitida — material de bastidor editorial.' },
-        { label: 'Conteúdo sensível:', val: infos.conteudoSensivel || 'nenhum de peso especial identificado.' }
+        { label: 'Ponto de Vista:', val: infos.pontoDeVista || 'Não informado.' },
+        { label: 'Idade:', val: infos.idade || 'Não informado.' },
+        { label: 'Gênero:', val: `${infos.genero || 'Não informado.'} Origem/Sotaque: ${infos.origemSotaque || 'Não informado.'}` },
+        { label: 'Local/Cenário:', val: infos.localCenario || 'Não informado.' },
+        { label: 'Tom:', val: infos.tom || 'Não informado.' },
+        { label: 'Ritmo:', val: infos.ritmo || 'Não informado.' },
+        { label: 'Interpretação:', val: infos.interpretacao || 'Não informado.' },
+        { label: 'Pontos de atenção:', val: infos.pontosAtencao || 'Não informado.' },
+        { label: 'Conteúdo sensível:', val: infos.conteudoSensivel || 'Não informado.' }
       ];
 
       for (const item of generalFields) {
@@ -5261,10 +5300,10 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       const infos = script.infosGerais || {};
       paragraphs.push(heading('Infos gerais', HeadingLevel.HEADING_1, { pageBreakBefore: true }));
       [
-        ['Ponto de Vista', infos.pontoDeVista], ['Idade', infos.idade || 'Direcionado a adultos de todas as faixas etárias.'],
+        ['Ponto de Vista', infos.pontoDeVista || 'Não informado.'], ['Idade', infos.idade || 'Não informado.'],
         ['Gênero', infos.genero], ['Origem/Sotaque', infos.origemSotaque], ['Local/Cenário', infos.localCenario],
         ['Tom', infos.tom], ['Ritmo', infos.ritmo], ['Interpretação', infos.interpretacao],
-        ['Pontos de atenção', infos.pontosAtencao], ['Conteúdo sensível', infos.conteudoSensivel || 'nenhum de peso especial identificado.']
+        ['Pontos de atenção', infos.pontosAtencao || 'Não informado.'], ['Conteúdo sensível', infos.conteudoSensivel || 'Não informado.']
       ].filter(([, value]) => value).forEach(([label, value]) => paragraphs.push(plain(`${label}: ${value}`)));
 
       // Keep opening titles alone on their page, as required by the script format.
@@ -5349,15 +5388,15 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       txt += `PÁGINA 2: INFOS GERAIS\n`;
       txt += `============================================================\n\n`;
       txt += `INFOS GERAIS\n\n`;
-      txt += `Ponto de Vista: ${script.infosGerais.pontoDeVista}\n\n`;
-      txt += `Idade: ${script.infosGerais.idade || 'Direcionado a adultos de todas as faixas etárias.'}\n\n`;
-      txt += `Gênero: ${script.infosGerais.genero} Origem/Sotaque: ${script.infosGerais.origemSotaque || ''}\n\n`;
-      txt += `Local/Cenário: ${script.infosGerais.localCenario}\n\n`;
-      txt += `Tom: ${script.infosGerais.tom}\n\n`;
-      txt += `Ritmo: ${script.infosGerais.ritmo || ''}\n\n`;
-      txt += `Interpretação: ${script.infosGerais.interpretacao || ''}\n\n`;
-      txt += `Pontos de atenção: ${script.infosGerais.pontosAtencao || ''}\n\n`;
-      txt += `Conteúdo sensível: ${script.infosGerais.conteudoSensivel || 'nenhum de peso especial identificado.'}\n\n`;
+      txt += `Ponto de Vista: ${script.infosGerais.pontoDeVista || 'Não informado.'}\n\n`;
+      txt += `Idade: ${script.infosGerais.idade || 'Não informado.'}\n\n`;
+      txt += `Gênero: ${script.infosGerais.genero || 'Não informado.'} Origem/Sotaque: ${script.infosGerais.origemSotaque || 'Não informado.'}\n\n`;
+      txt += `Local/Cenário: ${script.infosGerais.localCenario || 'Não informado.'}\n\n`;
+      txt += `Tom: ${script.infosGerais.tom || 'Não informado.'}\n\n`;
+      txt += `Ritmo: ${script.infosGerais.ritmo || 'Não informado.'}\n\n`;
+      txt += `Interpretação: ${script.infosGerais.interpretacao || 'Não informado.'}\n\n`;
+      txt += `Pontos de atenção: ${script.infosGerais.pontosAtencao || 'Não informado.'}\n\n`;
+      txt += `Conteúdo sensível: ${script.infosGerais.conteudoSensivel || 'Não informado.'}\n\n`;
 
       txt += `============================================================\n`;
       txt += `PÁGINA 3: (OPENING TITLES) & INÍCIO DA NARRAÇÃO\n`;
@@ -5436,7 +5475,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       fullText += `[Pág 1] ${p1Text}\n\n`;
 
       // Pág 2: Infos Gerais
-      const p2Text = `INFOS GERAIS\nPonto de Vista: ${script.infosGerais.pontoDeVista}\nIdade: ${script.infosGerais.idade || 'Direcionado a adultos de todas as faixas etárias.'}\nGênero: ${script.infosGerais.genero} Origem/Sotaque: ${script.infosGerais.origemSotaque || ''}\nLocal/Cenário: ${script.infosGerais.localCenario}\nTom: ${script.infosGerais.tom}\nRitmo: ${script.infosGerais.ritmo || ''}\nInterpretação: ${script.infosGerais.interpretacao || ''}\nPontos de atenção: ${script.infosGerais.pontosAtencao || ''}\nConteúdo sensível: ${script.infosGerais.conteudoSensivel || 'nenhum de peso especial identificado.'}`;
+      const p2Text = `INFOS GERAIS\nPonto de Vista: ${script.infosGerais.pontoDeVista || 'Não informado.'}\nIdade: ${script.infosGerais.idade || 'Não informado.'}\nGênero: ${script.infosGerais.genero || 'Não informado.'} Origem/Sotaque: ${script.infosGerais.origemSotaque || 'Não informado.'}\nLocal/Cenário: ${script.infosGerais.localCenario || 'Não informado.'}\nTom: ${script.infosGerais.tom || 'Não informado.'}\nRitmo: ${script.infosGerais.ritmo || 'Não informado.'}\nInterpretação: ${script.infosGerais.interpretacao || 'Não informado.'}\nPontos de atenção: ${script.infosGerais.pontosAtencao || 'Não informado.'}\nConteúdo sensível: ${script.infosGerais.conteudoSensivel || 'Não informado.'}`;
       revPages.push({ pageNum: 2, text: p2Text });
       fullText += `[Pág 2] ${p2Text}\n\n`;
 
