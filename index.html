@@ -4874,25 +4874,55 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         doc.text(String(num), pageWidth - margin, pageHeight - 14, { align: 'right' });
       }
 
-      const sourcePages = script.pages || [];
-      const pagesToRender = sourcePages.length
-        ? sourcePages.map(page => ({ ...page, paragraphs: extractAllBookParagraphs([page]) }))
-        : [{ paragraphs: script.allParagraphs || [] }];
-      let isFirstBodyPage = true;
+      function startNextBodyPage() {
+        stampPageNumber(runningPageNum);
+        doc.addPage();
+        runningPageNum++;
+        curY = 25;
+      }
 
-      for (const sourcePage of pagesToRender) {
-        const pageParagraphs = sourcePage.paragraphs || [];
+      function isStandaloneFrontMatterPage(paragraphs) {
+        const text = paragraphs.join(' ').replace(/\s+/g, ' ').trim();
+        if (!text || text.length > 700) return false;
+        const isDedication = /^Para\s+[\p{Lu}][\p{L}\p{M}]+(?:\s+[\p{Lu}][\p{L}\p{M}]+){0,2}\.\s*(?:Por .{1,150}[.!?])?$/u.test(text);
+        const hasQuote = /[“"].+[”"]/u.test(text);
+        const hasAttribution = /(?:—|–|-)\s*[\p{Lu}][\p{L}\p{M}'’. -]{1,90}$/u.test(text);
+        return isDedication || (hasQuote && hasAttribution);
+      }
+
+      // O texto comum flui entre páginas de origem para preencher cada página.
+      // Dedicatórias e epígrafes continuam isoladas, como no roteiro diagramado.
+      const renderSegments = [];
+      let flowingSourcePages = [];
+      const flushFlowingPages = () => {
+        if (!flowingSourcePages.length) return;
+        renderSegments.push({ type: 'flow', paragraphs: extractAllBookParagraphs(flowingSourcePages) });
+        flowingSourcePages = [];
+      };
+      for (const sourcePage of (script.pages || [])) {
+        const paragraphs = extractAllBookParagraphs([sourcePage]);
+        if (!paragraphs.length) continue;
+        if (isStandaloneFrontMatterPage(paragraphs)) {
+          flushFlowingPages();
+          renderSegments.push({ type: 'standalone', paragraphs });
+        } else {
+          flowingSourcePages.push(sourcePage);
+        }
+      }
+      flushFlowingPages();
+      if (!renderSegments.length && script.allParagraphs?.length) {
+        renderSegments.push({ type: 'flow', paragraphs: script.allParagraphs });
+      }
+
+      for (const segment of renderSegments) {
+        const pageParagraphs = segment.paragraphs || [];
         if (!pageParagraphs.length) continue;
 
-        // Cada página de origem começa em uma página nova. Overflow pode criar
-        // páginas adicionais, mas nunca puxa o conteúdo da página seguinte.
-        if (!isFirstBodyPage) {
-          stampPageNumber(runningPageNum);
-          doc.addPage();
-          runningPageNum++;
-          curY = 25;
+        if (segment.type === 'standalone' && curY > 25) startNextBodyPage();
+        const firstContentParagraph = stripOriginalPageMarkers(pageParagraphs[0] || '').trim();
+        if (segment.type === 'flow' && isChapterHeader(firstContentParagraph) && curY > 25) {
+          startNextBodyPage();
         }
-        isFirstBodyPage = false;
 
         for (let pIdx = 0; pIdx < pageParagraphs.length; pIdx++) {
         const paragraph = pageParagraphs[pIdx];
@@ -4901,6 +4931,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
         // Verifica se é cabeçalho de capítulo (número isolado, Capítulo X, Parte X, etc.)
         if (isChapterHeader(cleanP)) {
+          if (curY > 25) startNextBodyPage();
           if (/^\d{1,3}$/.test(cleanP)) {
             // Número do capítulo isolado (topo à direita, em negrito 18pt)
             doc.setFont('times', 'bold');
@@ -5018,6 +5049,8 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         // Espaçamento entre parágrafos
         curY += 2.5;
       }
+
+        if (segment.type === 'standalone') startNextBodyPage();
       }
 
       // Estampa o número da página na última página de texto do miolo
