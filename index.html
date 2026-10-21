@@ -3464,7 +3464,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       'portugal', 'brasil', 'lisboa', 'porto', 'coimbra', 'madrid', 'paris', 'londres',
       'audible', 'studios', 'estúdio', 'gravação', 'roteiro', 'audiolivro', 'original', 'revisado',
       'tempo', 'anos', 'vida', 'mundo', 'terra', 'homem', 'mulher', 'dia', 'noite', 'casa',
-      'pessoa', 'pessoas', 'coisa', 'coisas', 'rocha', 'rochas', 'cidade', 'estado', 'país',
+      'pessoa', 'pessoas', 'coisa', 'coisas', 'rocha', 'rochas', 'cidade', 'estado', 'país', 'disse', 'diz', 'dizem', 'dizia', 'chefe', 'contou', 'falou', 'perguntou',
       'trabalho', 'muralha', 'amor', 'amigo', 'amiga', 'semana', 'ano', 'mês', 'hora', 'minuto',
       'olho', 'olhos', 'mão', 'mãos', 'corpo', 'mente', 'alma', 'coração', 'rua', 'porta', 'mesa'
     ]);
@@ -3678,7 +3678,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         };
         const tokens = [...pageText.matchAll(/[\p{L}][\p{L}\p{M}'’.-]*/gu)];
         for (let start = 0; start < tokens.length; start++) {
-          for (let length = 3; length <= 8 && start + length <= tokens.length; length++) {
+          for (let length = 3; length <= 6 && start + length <= tokens.length; length++) {
             const windowTokens = tokens.slice(start, start + length);
             const windowText = pageText.slice(windowTokens[0].index, windowTokens.at(-1).index + windowTokens.at(-1)[0].length);
             if (/[.!?;:\n]/.test(windowText)) break;
@@ -3694,8 +3694,12 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
               const containsKnownPortugueseWord = normalizedTokens.some(token =>
                 !anchors.has(token) && (COMMON_PT_WORDS.has(token) || COMMON_BRAZILIAN_NAMES.has(token) || COMMON_ASSIMILATED_LOANWORDS.has(token))
               );
-              if (anchorCount >= 2 && !containsPortugueseFunctionWord && !containsPortugueseWordForm && !containsKnownPortugueseWord) {
-                const key = windowText.toLowerCase();
+              const normalizedWindow = windowText.toLowerCase().replace(/\s+/g, ' ');
+              const containsCuratedPhrase = sortedDictKeys.some(term =>
+                term.includes(' ') && normalizedWindow.includes(term.toLowerCase())
+              );
+              if (anchorCount >= 2 && !containsPortugueseFunctionWord && !containsPortugueseWordForm && !containsKnownPortugueseWord && !containsCuratedPhrase) {
+                const key = normalizedWindow;
                 const overlappingPhrase = [...automaticCandidates.entries()].find(([, item]) =>
                   item.detectedLanguage && (item.text.toLowerCase().includes(key) || key.includes(item.text.toLowerCase()))
                 );
@@ -4022,6 +4026,13 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         /^(?:[A-ZÁ-Ú0-9\s\:\–\—]{3,50})$/.test(cleanP);
     }
 
+    function cleanInDesignRunningMetadata(text) {
+      return String(text || '')
+        .replace(/\b[A-ZÀ-Ý][\p{L}\p{M}\d _-]{1,60}\.indd(?=[A-ZÀ-Ý\s]|$)/giu, '')
+        .replace(/\b(?:\d{2}\/\d{2}\/\d{4}){1,2}\s*(?:\d{2}:\d{2}:\d{2}){1,2}\b/g, ' ')
+        .replace(/ {2,}/g, ' ');
+    }
+
     function correctKnownOcrArtifacts(text) {
       return String(text || '')
         .replace(/\btr~es\b/gi, match => match[0] === match[0].toUpperCase() ? 'Três' : 'três')
@@ -4172,7 +4183,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           continue;
         }
 
-        let processedText = correctKnownOcrArtifacts(stripOriginalPageMarkers(p.text));
+        let processedText = correctKnownOcrArtifacts(stripOriginalPageMarkers(cleanInDesignRunningMetadata(p.text)));
 
         // Strip footnotes
         if (ruleFootnotes) {
@@ -4696,10 +4707,20 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
             if (currentLine) {
               lines.push({ text: currentLine, indent: isFirstLine ? indentMm : 0 });
               isFirstLine = false;
-              currentLine = word;
+              if (doc.getTextWidth(word) > contentWidth) {
+                doc.splitTextToSize(word, contentWidth).forEach(chunk => {
+                  lines.push({ text: chunk, indent: 0 });
+                });
+                currentLine = '';
+              } else {
+                currentLine = word;
+              }
             } else {
-              lines.push({ text: word, indent: isFirstLine ? indentMm : 0 });
-              isFirstLine = false;
+              const oversizedWordLines = doc.splitTextToSize(word, maxW);
+              oversizedWordLines.forEach(chunk => {
+                lines.push({ text: chunk, indent: isFirstLine ? indentMm : 0 });
+                isFirstLine = false;
+              });
               currentLine = '';
             }
           }
@@ -4720,12 +4741,28 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
             doc.setFontSize(14);
             doc.setTextColor(30, 41, 59);
           }
-          const lineWidth = contentWidth - lineObj.indent;
           const isParagraphLastLine = lineIdx === lines.length - 1;
-          doc.text(lineObj.text, margin + lineObj.indent, curY, {
-            align: isParagraphLastLine ? 'left' : 'justify',
-            maxWidth: lineWidth
-          });
+          let renderedLine = lineObj.text;
+          if (!isParagraphLastLine) {
+            const wordsInLine = renderedLine.split(' ');
+            const gaps = wordsInLine.length - 1;
+            const naturalWidth = doc.getTextWidth(renderedLine);
+            const spaceWidth = doc.getTextWidth(' ');
+            const targetWidth = contentWidth - lineObj.indent;
+            const extraSpaces = gaps > 0
+              ? Math.min(Math.max(0, Math.floor((targetWidth - naturalWidth) / spaceWidth)), gaps * 3)
+              : 0;
+            if (extraSpaces > 0) {
+              const baseExtra = Math.floor(extraSpaces / gaps);
+              let remainder = extraSpaces % gaps;
+              renderedLine = wordsInLine.reduce((result, word, index) => {
+                if (index === 0) return word;
+                const additional = baseExtra + (remainder-- > 0 ? 1 : 0);
+                return `${result}${' '.repeat(1 + additional)}${word}`;
+              }, '');
+            }
+          }
+          doc.text(renderedLine, margin + lineObj.indent, curY, { align: 'left' });
           curY += lineHeightMm;
         }
 
