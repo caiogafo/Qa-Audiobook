@@ -467,10 +467,10 @@
       <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3">
         <div class="text-xs text-slate-300">
           <strong class="text-indigo-200">Exportar roteiro e diferenças</strong>
-          <span class="ml-1 text-slate-400">O PDF mantém o layout do revisado enviado; DOCX e revisões geradas seguem as opções de pronúncia e notas.</span>
+          <span class="ml-1 text-slate-400">O PDF e o DOCX são montados do roteiro revisado, aplicando as pronúncias cadastradas e a remoção de notas habilitada.</span>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <button onclick="downloadAuditedRevised('pdf')" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-500">PDF revisado (layout original)</button>
+          <button onclick="downloadAuditedRevised('pdf')" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-500">Baixar PDF revisado com correções</button>
           <button onclick="downloadAuditedRevised('docx')" class="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-500">Roteiro revisado DOCX</button>
           <button onclick="downloadDifferenceWorkbook()" class="rounded-lg bg-cyan-700 px-3 py-2 text-xs font-bold text-white hover:bg-cyan-600">Planilha de diferenças XLSX</button>
         </div>
@@ -2304,8 +2304,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           size: file.size,
           totalPages: totalPages,
           pages: pages,
-          fullText: fullText,
-          sourceFile: file
+          fullText: fullText
         };
       } catch (err) {
         console.error('Erro na extração do PDF:', err);
@@ -2654,11 +2653,6 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
     function downloadAuditedRevised(format) {
       if (!state.docOrig || !state.docRev || !state.auditMetrics) {
         alertBox('Execute a comparação dos PDFs antes de baixar o roteiro revisado.');
-        return;
-      }
-      if (format === 'pdf' && state.docRev.sourceFile instanceof Blob) {
-        downloadBlobFile(state.docRev.sourceFile, state.docRev.name || state.docRev.sourceFile.name || 'revisado.pdf');
-        alertBox('PDF revisado baixado preservando o arquivo, a paginação e a formatação originais.');
         return;
       }
       generateRevisedScript();
