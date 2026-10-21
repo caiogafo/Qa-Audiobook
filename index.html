@@ -2562,13 +2562,14 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       const pages = doc?.pages || [];
       const repeatedHeaders = findRepeatedRunningHeaders(pages);
       return pages.map(page => {
-        const withoutFolio = stripSourcePageFolio(page.text, page.pageNum, repeatedHeaders);
+        const pageNum = page.pageNum ?? page.origPageNum;
+        const withoutFolio = stripSourcePageFolio(page.text, pageNum, repeatedHeaders);
         const withoutMetadata = stripRepeatedRunningHeaders(
           cleanInDesignRunningMetadata(withoutFolio),
           repeatedHeaders
         );
         return {
-          pageNum: page.pageNum,
+          pageNum,
           text: normalizeAuditText(withoutMetadata).replace(/\s+/g, ' ').trim()
         };
       }).filter(page => page.text);
@@ -2582,16 +2583,16 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       return normalizeAuditText(doc?.fullText || '').replace(/\s+/g, ' ').trim();
     }
 
-    function getAuditDifferenceRows() {
-      if (!state.docOrig || !state.docRev) return [];
+    function getAuditDifferenceRowsBetween(originalDoc, revisedDoc) {
+      if (!originalDoc || !revisedDoc) return [];
       const dmp = new diff_match_patch();
-      const originalPages = getAuditComparablePages(state.docOrig);
-      const revisedPages = getAuditComparablePages(state.docRev);
+      const originalPages = getAuditComparablePages(originalDoc);
+      const revisedPages = getAuditComparablePages(revisedDoc);
       const comparableText = (doc, pages) => Array.isArray(doc?.pages) && doc.pages.length
         ? pages.map(page => page.text).join(' ')
         : normalizeAuditText(doc?.fullText || '').replace(/\s+/g, ' ').trim();
-      const original = comparableText(state.docOrig, originalPages);
-      const revised = comparableText(state.docRev, revisedPages);
+      const original = comparableText(originalDoc, originalPages);
+      const revised = comparableText(revisedDoc, revisedPages);
       const diffs = dmp.diff_main(original, revised);
       dmp.diff_cleanupSemantic(diffs);
       const rows = [];
@@ -2686,6 +2687,10 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       return rows;
     }
 
+    function getAuditDifferenceRows() {
+      return getAuditDifferenceRowsBetween(state.docOrig, state.docRev);
+    }
+
     function downloadAuditedRevised(format) {
       if (!state.docOrig || !state.docRev || !state.auditMetrics) {
         alertBox('Execute a comparação dos PDFs antes de baixar o roteiro revisado.');
@@ -2709,7 +2714,26 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         alertBox('Biblioteca XLSX não carregada. Verifique sua conexão com a internet e tente novamente.');
         return;
       }
-      const rows = getAuditDifferenceRows();
+      generateRevisedScript();
+      const comparisonRows = getAuditDifferenceRows();
+      const generatedDoc = genState.generatedDoc;
+      const generatedRows = generatedDoc?.pages?.length
+        ? getAuditDifferenceRowsBetween(state.docOrig, generatedDoc).filter(item =>
+          /^(?:Pronúncia adicionada|Correção de texto|Remover a nota editorial)/i.test(item.solution)
+        )
+        : [];
+      const rowKey = item => `${item.passage}|${item.solution.split(':', 1)[0]}`
+        .replace(/\s+/g, ' ').trim().toLocaleLowerCase('pt-BR');
+      const seenRows = new Set(comparisonRows.map(rowKey));
+      const rows = [
+        ...comparisonRows,
+        ...generatedRows.filter(item => {
+          const key = rowKey(item);
+          if (seenRows.has(key)) return false;
+          seenRows.add(key);
+          return true;
+        })
+      ];
       const sheetRows = rows.length
         ? rows.map(item => ({ 'Página do problema': item.page, 'Trecho com problema': item.passage, 'Solução': item.solution }))
         : [{ 'Página do problema': '—', 'Trecho com problema': 'Nenhuma diferença textual encontrada.', 'Solução': 'Nenhuma correção necessária.' }];
