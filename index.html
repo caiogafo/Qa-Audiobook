@@ -22,6 +22,12 @@
   <!-- jsPDF via CDN for client-side PDF generation -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
+  <!-- DOCX generation in the browser -->
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+
+  <!-- XLSX generation in the browser -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
   <!-- Diff-Match-Patch via CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
 
@@ -458,6 +464,17 @@
 
     <!-- TAB 1: Diff Engine & Structural Omissions -->
     <div id="diffTab" class="tab-content flex flex-col gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3">
+        <div class="text-xs text-slate-300">
+          <strong class="text-indigo-200">Exportar roteiro e diferenças</strong>
+          <span class="ml-1 text-slate-400">O roteiro usa as regras do gerador: pronúncias ativas e remoção de notas selecionada.</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="downloadAuditedRevised('pdf')" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-500">Roteiro revisado PDF</button>
+          <button onclick="downloadAuditedRevised('docx')" class="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-500">Roteiro revisado DOCX</button>
+          <button onclick="downloadDifferenceWorkbook()" class="rounded-lg bg-cyan-700 px-3 py-2 text-xs font-bold text-white hover:bg-cyan-600">Planilha de diferenças XLSX</button>
+        </div>
+      </div>
       <!-- Structural Alert Box -->
       <div id="structuralAlerts"
         class="hidden bg-rose-950/30 border border-rose-800/60 rounded-xl p-4 flex items-start gap-3">
@@ -606,6 +623,11 @@
             class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-600/25 flex items-center gap-1.5">
             <i data-lucide="download" class="w-4 h-4"></i>
             Baixar PDF Revisado
+          </button>
+          <button onclick="downloadGeneratedDocx()"
+            class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs transition flex items-center gap-1.5">
+            <i data-lucide="file-text" class="w-4 h-4"></i>
+            Baixar DOCX
           </button>
         </div>
       </div>
@@ -952,6 +974,11 @@
                     <i data-lucide="file-down" class="w-3.5 h-3.5"></i>
                     Baixar PDF (.pdf)
                   </button>
+                  <button onclick="downloadGeneratedDocx()"
+                    class="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs transition flex items-center gap-1.5">
+                    <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+                    Baixar DOCX (.docx)
+                  </button>
                   <button onclick="downloadGeneratedTxt()"
                     class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition border border-slate-700 flex items-center gap-1">
                     <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
@@ -1004,6 +1031,11 @@
                   class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-600/25 flex items-center gap-1.5">
                   <i data-lucide="download" class="w-4 h-4"></i>
                   Baixar PDF Revisado
+                </button>
+                <button onclick="downloadGeneratedDocx()"
+                  class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs transition flex items-center gap-1.5">
+                  <i data-lucide="file-text" class="w-4 h-4"></i>
+                  Baixar DOCX
                 </button>
               </div>
             </div>
@@ -2505,6 +2537,139 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       alertBox.querySelector('h4').classList.toggle('text-slate-200', !hasFindings);
       alertBox.classList.remove('hidden');
       return state.auditMetrics;
+    }
+
+    function getAuditDifferenceRows() {
+      if (!state.docOrig || !state.docRev) return [];
+      const dmp = new diff_match_patch();
+      const original = normalizeAuditText(state.docOrig.fullText).replace(/\s+/g, ' ').trim();
+      const revised = normalizeAuditText(state.docRev.fullText).replace(/\s+/g, ' ').trim();
+      const diffs = dmp.diff_main(original, revised);
+      dmp.diff_cleanupSemantic(diffs);
+      const rows = [];
+      let originalPos = 0;
+      let revisedPos = 0;
+      let pending = null;
+
+      const sentenceAt = (text, index, changedText) => {
+        if (!text) return String(changedText || '').trim();
+        const at = Math.max(0, Math.min(index, text.length));
+        const left = text.slice(0, at);
+        const right = text.slice(at);
+        const leftStops = [...left.matchAll(/[.!?\n](?:[”’"')\]]*)?/g)];
+        const start = leftStops.length ? leftStops[leftStops.length - 1].index + leftStops[leftStops.length - 1][0].length : 0;
+        const rightStop = right.search(/[.!?](?:[”’"')\]]*)?(?=\s|$)|\n/);
+        const end = rightStop < 0 ? text.length : at + rightStop + 1;
+        const context = text.slice(start, end).trim();
+        return context || String(changedText || '').trim();
+      };
+
+      const findPage = (doc, phrase) => {
+        const pages = doc?.pages || [];
+        const target = normalizeAuditText(phrase).replace(/\s+/g, ' ').trim().toLocaleLowerCase('pt-BR');
+        if (!target) return '';
+        const targetWords = target.match(/[\p{L}\p{N}]{3,}/gu) || [];
+        let best = { page: '', score: 0 };
+        for (const page of pages) {
+          const text = normalizeAuditText(page.text).replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
+          if (text.includes(target)) return page.pageNum || '';
+          const score = targetWords.reduce((sum, word) => sum + (text.includes(word) ? 1 : 0), 0);
+          if (score > best.score) best = { page: page.pageNum || '', score };
+        }
+        return best.score ? best.page : '';
+      };
+
+      const finish = () => {
+        if (!pending) return;
+        const originalSentence = pending.removed.trim()
+          ? sentenceAt(original, pending.originalStart, pending.removed)
+          : '';
+        const revisedSentence = pending.inserted.trim()
+          ? sentenceAt(revised, pending.revisedStart, pending.inserted)
+          : '';
+        const target = originalSentence || revisedSentence || pending.removed || pending.inserted;
+        const originalPage = findPage(state.docOrig, originalSentence || pending.removed);
+        const revisedPage = findPage(state.docRev, revisedSentence || pending.inserted);
+        const pageLabel = [
+          originalPage ? `Original: ${originalPage}` : '',
+          revisedPage ? `Revisado: ${revisedPage}` : ''
+        ].filter(Boolean).join(' / ') || 'Não localizada';
+        const location = [
+          originalSentence ? `Original: ${originalSentence}` : '',
+          revisedSentence ? `Revisado: ${revisedSentence}` : ''
+        ].filter(Boolean).join('\n');
+        let solution;
+        const oldLooksLikeNote = /\b(?:nota(?:\s+de\s+rodap[eé])?|rodap[eé]|nota\s+do\s+(?:autor|tradutor|editor))\b/i.test(pending.removed);
+        const revisedAddsPronunciation = /[\p{L}][^\n]{0,45}\[[^\]]{2,}\]/u.test(revisedSentence) && !/\[[^\]]{2,}\]/.test(originalSentence);
+        if (revisedSentence && revisedAddsPronunciation) {
+          solution = `Manter a pronúncia adicionada no roteiro: ${revisedSentence}`;
+        } else if (oldLooksLikeNote) {
+          solution = `Remover a nota do texto narrado. Trecho revisado a manter: ${revisedSentence || originalSentence}`;
+        } else if (originalSentence && revisedSentence) {
+          solution = `Usar o trecho revisado: ${revisedSentence}`;
+        } else if (originalSentence && !revisedSentence) {
+          solution = `Confirmar a remoção. Se o trecho deve permanecer, restaurar: ${originalSentence}`;
+        } else {
+          solution = `Confirmar a inclusão no revisado: ${revisedSentence || target}`;
+        }
+        rows.push({ page: pageLabel, passage: location || target, solution });
+        pending = null;
+      };
+
+      for (const [op, text] of diffs) {
+        if (op === 0) {
+          finish();
+          originalPos += text.length;
+          revisedPos += text.length;
+          continue;
+        }
+        if (!pending) pending = { originalStart: originalPos, revisedStart: revisedPos, removed: '', inserted: '' };
+        if (op === -1) { pending.removed += text; originalPos += text.length; }
+        if (op === 1) { pending.inserted += text; revisedPos += text.length; }
+      }
+      finish();
+      return rows;
+    }
+
+    function downloadAuditedRevised(format) {
+      if (!state.docOrig || !state.docRev || !state.auditMetrics) {
+        alertBox('Execute a comparação dos PDFs antes de baixar o roteiro revisado.');
+        return;
+      }
+      generateRevisedScript();
+      if (!genState.generatedDoc?.pages?.length) {
+        alertBox('Não há texto de origem disponível para compilar o roteiro revisado.');
+        return;
+      }
+      if (format === 'docx') downloadGeneratedDocx();
+      else downloadGeneratedPdf();
+    }
+
+    function downloadDifferenceWorkbook() {
+      if (!state.docOrig || !state.docRev || !state.auditMetrics) {
+        alertBox('Execute a comparação dos PDFs antes de gerar a planilha.');
+        return;
+      }
+      if (!window.XLSX) {
+        alertBox('Biblioteca XLSX não carregada. Verifique sua conexão com a internet e tente novamente.');
+        return;
+      }
+      const rows = getAuditDifferenceRows();
+      const sheetRows = rows.length
+        ? rows.map(item => ({ 'Página do problema': item.page, 'Trecho com problema': item.passage, 'Solução': item.solution }))
+        : [{ 'Página do problema': '—', 'Trecho com problema': 'Nenhuma diferença textual encontrada.', 'Solução': 'Nenhuma correção necessária.' }];
+      const worksheet = XLSX.utils.json_to_sheet(sheetRows, { header: ['Página do problema', 'Trecho com problema', 'Solução'] });
+      worksheet['!cols'] = [{ wch: 28 }, { wch: 78 }, { wch: 78 }];
+      worksheet['!rows'] = sheetRows.map(() => ({ hpt: 60 }));
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Revisão texto');
+      const workTitle = document.getElementById('genTitle')?.value?.trim()
+        || genState.generatedDoc?.title
+        || inferBookTitleFromDocument(state.docOrig, state.docOrig.name)
+        || state.docOrig.name.replace(/\.pdf$/i, '');
+      const safeTitle = workTitle.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+      XLSX.writeFile(workbook, `Revisão texto ${safeTitle}.xlsx`);
+      alertBox(`Planilha gerada: ${rows.length} diferença(s) para revisar.`);
     }
 
     function inspectRevisedText(text) {
@@ -4892,6 +5057,126 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       const safeTitle = script.title.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 35);
       doc.save(`${safeTitle}_Roteiro_Revisado_Audible.pdf`);
       alertBox('✓ PDF Revisado gerado com formatação de livro e baixado com sucesso!');
+    }
+
+    /** Download the compiled script as an editable Microsoft Word document. */
+    async function downloadGeneratedDocx() {
+      const word = window.docx;
+      if (!word || !word.Document || !word.Packer) {
+        alertBox('Biblioteca DOCX não carregada. Verifique sua conexão com a internet e tente novamente.');
+        return;
+      }
+
+      generateRevisedScript();
+      const script = genState.generatedDoc;
+      if (!script || !script.pages || script.pages.length === 0) {
+        alertBox('Nenhum roteiro compilado disponível para download. Carregue o PDF do miolo ou selecione um exemplo.');
+        return;
+      }
+
+      const { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } = word;
+      const paragraphs = [];
+      const plain = (text, options = {}) => new Paragraph({
+        children: [new TextRun({ text: String(text || ''), font: 'Times New Roman', size: 24, ...options.run })],
+        spacing: { after: 180, ...options.spacing },
+        alignment: options.alignment || AlignmentType.JUSTIFIED,
+        ...(options.paragraph || {})
+      });
+      const heading = (text, level = HeadingLevel.HEADING_1, extra = {}) => new Paragraph({
+        text: String(text || ''), heading: level, pageBreakBefore: !!extra.pageBreakBefore,
+        alignment: extra.alignment || AlignmentType.LEFT,
+        spacing: { before: 180, after: 180 },
+        run: { font: 'Times New Roman', bold: true }
+      });
+      const titleLine = (text, opts = {}) => new Paragraph({
+        children: [new TextRun({ text: String(text || ''), font: 'Times New Roman', size: opts.size || 26,
+          bold: !!opts.bold, italics: !!opts.italics })],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: opts.before || 120, after: opts.after || 220 },
+        pageBreakBefore: !!opts.pageBreakBefore
+      });
+
+      // Production notes and general information precede the narration script.
+      paragraphs.push(titleLine((script.title || 'ROTEIRO REVISADO').toUpperCase(), { size: 32, bold: true, after: 100 }));
+      paragraphs.push(titleLine('Texto de narração adaptado', { size: 22, italics: true, after: 300 }));
+      paragraphs.push(heading('Como ler este documento'));
+      [
+        'Este arquivo é o texto exato a ser narrado — tudo o que aparece aqui deve ser lido em voz alta, salvo indicação em contrário. Não é o PDF original do livro.',
+        'Trechos que não devem ser narrados (capa, folha de rosto, ficha catalográfica, sumário, notas de rodapé e bibliografia) foram removidos.',
+        'Linhas curtas em itálico cinza, iniciadas por uma seta, são orientação para quem grava e não devem ser lidas.',
+        'Avisos de imagem indicam a página correspondente do PDF original para revisão editorial.',
+        'Pronúncias entre colchetes são apoio à fala; não leia os colchetes.',
+        'O glossário do próprio livro é texto a narrar. Cada pronúncia de apoio aparece uma única vez.',
+        'Os campos de narrador e ano de produção permanecem em aberto quando esses dados não foram fornecidos.'
+      ].forEach(item => paragraphs.push(new Paragraph({ text: item, bullet: { indent: 360 }, style: 'Normal', spacing: { after: 120 } })));
+
+      const infos = script.infosGerais || {};
+      paragraphs.push(heading('Infos gerais', HeadingLevel.HEADING_1, { pageBreakBefore: true }));
+      [
+        ['Ponto de Vista', infos.pontoDeVista], ['Idade', infos.idade || 'Direcionado a adultos de todas as faixas etárias.'],
+        ['Gênero', infos.genero], ['Origem/Sotaque', infos.origemSotaque], ['Local/Cenário', infos.localCenario],
+        ['Tom', infos.tom], ['Ritmo', infos.ritmo], ['Interpretação', infos.interpretacao],
+        ['Pontos de atenção', infos.pontosAtencao], ['Conteúdo sensível', infos.conteudoSensivel || 'nenhum de peso especial identificado.']
+      ].filter(([, value]) => value).forEach(([label, value]) => paragraphs.push(plain(`${label}: ${value}`)));
+
+      // Keep opening titles alone on their page, as required by the script format.
+      paragraphs.push(titleLine('(OPENING TITLES)', { size: 22, pageBreakBefore: true, before: 900, after: 500 }));
+      paragraphs.push(titleLine(`Audible Studios apresenta: ${script.title}`, { size: 24 }));
+      paragraphs.push(titleLine(`Escrito por ${script.author}`, { size: 24 }));
+      if (script.translator) paragraphs.push(titleLine(`Traduzido por ${script.translator}`, { size: 24 }));
+      paragraphs.push(titleLine(`E narrado por ${script.narrator}`, { size: 24 }));
+
+      (script.frontMatterPages || []).forEach((items, index) => {
+        paragraphs.push(heading(`Folha de rosto / citação ${index + 1}`, HeadingLevel.HEADING_2, { pageBreakBefore: true }));
+        (items || []).forEach(item => paragraphs.push(plain(item)));
+      });
+
+      const allParagraphs = (script.allParagraphs && script.allParagraphs.length)
+        ? script.allParagraphs : extractAllBookParagraphs(script.pages || []);
+      let firstBodyParagraph = true;
+      allParagraphs.forEach(text => {
+        const clean = String(text || '').trim();
+        if (!clean) return;
+        if (isChapterHeader(clean)) {
+          paragraphs.push(heading(clean, HeadingLevel.HEADING_1, { pageBreakBefore: firstBodyParagraph }));
+        } else {
+          paragraphs.push(plain(clean, { paragraph: firstBodyParagraph ? { pageBreakBefore: true } : {} }));
+        }
+        firstBodyParagraph = false;
+      });
+
+      // Closing titles start on a fresh, dedicated page.
+      paragraphs.push(titleLine('(CLOSING TITLES)', { size: 22, pageBreakBefore: true, before: 900, after: 500 }));
+      paragraphs.push(titleLine(`Essa é uma produção Audible Studios do livro ${script.title}`, { size: 23 }));
+      paragraphs.push(titleLine(`Escrito por ${script.author}`, { size: 23 }));
+      if (script.translator) paragraphs.push(titleLine(`Traduzido por ${script.translator}`, { size: 23 }));
+      paragraphs.push(titleLine(`E narrado por ${script.narrator}`, { size: 23 }));
+      paragraphs.push(titleLine(`Produtor(a) Executivo(a): ${script.produtorExec || 'Joana De Conti'}`, { size: 20 }));
+      paragraphs.push(titleLine(`Produtor(a): ${script.produtor || 'Alyson Borges'}`, { size: 20 }));
+      paragraphs.push(titleLine(`Copyright (c) ${script.author}, ${script.ano || '[ANO]'}.`, { size: 18 }));
+      paragraphs.push(titleLine(`Copyright da versão audiolivro (c) Audible Studios. Produzida em ${script.anoAudio || '[ANO]'}.`, { size: 18 }));
+      paragraphs.push(titleLine('Audible Studios é uma divisão da Audible, Inc.', { size: 18 }));
+
+      try {
+        const wordDocument = new Document({
+          creator: 'QA Audiobook', title: `${script.title} — Roteiro Revisado`,
+          styles: { default: { document: { run: { font: 'Times New Roman', size: 24 }, paragraph: { spacing: { after: 180 } } } } },
+          sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children: paragraphs }]
+        });
+        const blob = await Packer.toBlob(wordDocument);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${(script.title || 'roteiro').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 35)}_Roteiro_Revisado_Audible.docx`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        alertBox('✓ DOCX editável gerado e baixado com sucesso!');
+      } catch (error) {
+        console.error('Falha ao gerar DOCX:', error);
+        alertBox('Não foi possível gerar o DOCX. Tente novamente após recarregar a página.');
+      }
     }
 
     /**
