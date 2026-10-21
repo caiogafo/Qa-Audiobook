@@ -467,10 +467,10 @@
       <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3">
         <div class="text-xs text-slate-300">
           <strong class="text-indigo-200">Exportar roteiro e diferenças</strong>
-          <span class="ml-1 text-slate-400">O roteiro usa as regras do gerador: pronúncias ativas e remoção de notas selecionada.</span>
+          <span class="ml-1 text-slate-400">O PDF mantém o layout do revisado enviado; DOCX e revisões geradas seguem as opções de pronúncia e notas.</span>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <button onclick="downloadAuditedRevised('pdf')" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-500">Roteiro revisado PDF</button>
+          <button onclick="downloadAuditedRevised('pdf')" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-500">PDF revisado (layout original)</button>
           <button onclick="downloadAuditedRevised('docx')" class="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-500">Roteiro revisado DOCX</button>
           <button onclick="downloadDifferenceWorkbook()" class="rounded-lg bg-cyan-700 px-3 py-2 text-xs font-bold text-white hover:bg-cyan-600">Planilha de diferenças XLSX</button>
         </div>
@@ -2285,7 +2285,8 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           size: file.size,
           totalPages: totalPages,
           pages: pages,
-          fullText: fullText
+          fullText: fullText,
+          sourceFile: file
         };
       } catch (err) {
         console.error('Erro na extração do PDF:', err);
@@ -2634,6 +2635,18 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
     function downloadAuditedRevised(format) {
       if (!state.docOrig || !state.docRev || !state.auditMetrics) {
         alertBox('Execute a comparação dos PDFs antes de baixar o roteiro revisado.');
+        return;
+      }
+      if (format === 'pdf' && state.docRev.sourceFile instanceof Blob) {
+        const url = URL.createObjectURL(state.docRev.sourceFile);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = state.docRev.name || state.docRev.sourceFile.name || 'revisado.pdf';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        alertBox('PDF revisado baixado preservando o arquivo, a paginação e a formatação originais.');
         return;
       }
       generateRevisedScript();
@@ -5337,7 +5350,8 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         size: 980000,
         totalPages: revPages.length,
         pages: revPages,
-        fullText: fullText
+        fullText: fullText,
+        generatedFromScript: true
       };
 
       document.getElementById('revFileStatus').innerHTML = `<span class="text-emerald-400 font-bold">✓ Roteiro Gerado pelo Sistema</span> — ${state.docRev.totalPages} págs (Padrão Oficial Audible)`;
