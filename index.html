@@ -4833,7 +4833,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       doc.text('2', pageWidth - margin, pageHeight - 14, { align: 'right' });
 
       // ==========================================
-      // PÁGINA 3+: FLUXO CONTÍNUO DO TEXTO LITERÁRIO COM QUEBRA APENAS POR CAPÍTULO
+      // PÁGINA 3+: TEXTO LITERÁRIO PRESERVANDO AS QUEBRAS DO PDF DE ORIGEM
       // ==========================================
       doc.addPage();
       let runningPageNum = 3;
@@ -4874,29 +4874,33 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         doc.text(String(num), pageWidth - margin, pageHeight - 14, { align: 'right' });
       }
 
-      const allParagraphs = (script.allParagraphs && script.allParagraphs.length > 0)
-        ? script.allParagraphs
-        : extractAllBookParagraphs(script.pages || []);
+      const sourcePages = script.pages || [];
+      const pagesToRender = sourcePages.length
+        ? sourcePages.map(page => ({ ...page, paragraphs: extractAllBookParagraphs([page]) }))
+        : [{ paragraphs: script.allParagraphs || [] }];
+      let isFirstBodyPage = true;
 
-      let chapterCount = 0;
+      for (const sourcePage of pagesToRender) {
+        const pageParagraphs = sourcePage.paragraphs || [];
+        if (!pageParagraphs.length) continue;
 
-      for (let pIdx = 0; pIdx < allParagraphs.length; pIdx++) {
-        const paragraph = allParagraphs[pIdx];
+        // Cada página de origem começa em uma página nova. Overflow pode criar
+        // páginas adicionais, mas nunca puxa o conteúdo da página seguinte.
+        if (!isFirstBodyPage) {
+          stampPageNumber(runningPageNum);
+          doc.addPage();
+          runningPageNum++;
+          curY = 25;
+        }
+        isFirstBodyPage = false;
+
+        for (let pIdx = 0; pIdx < pageParagraphs.length; pIdx++) {
+        const paragraph = pageParagraphs[pIdx];
         const cleanP = stripOriginalPageMarkers(paragraph).trim();
         if (!cleanP) continue;
 
         // Verifica se é cabeçalho de capítulo (número isolado, Capítulo X, Parte X, etc.)
         if (isChapterHeader(cleanP)) {
-          chapterCount++;
-
-          // Regra Audible: Quebra de página estrita ocorre SOMENTE quando termina um capítulo
-          if (chapterCount > 1) {
-            stampPageNumber(runningPageNum);
-            doc.addPage();
-            runningPageNum++;
-            curY = 25;
-          }
-
           if (/^\d{1,3}$/.test(cleanP)) {
             // Número do capítulo isolado (topo à direita, em negrito 18pt)
             doc.setFont('times', 'bold');
@@ -4933,11 +4937,11 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
         // Parágrafo literário normal do miolo
         doc.setFont('times', 'normal');
-        doc.setFontSize(14);
+        doc.setFontSize(11.5);
         doc.setTextColor(30, 41, 59);
 
         const indentMm = 7;
-        const lineHeightMm = 6.3;
+        const lineHeightMm = 5.2;
         const words = cleanP.split(/\s+/);
         const lines = [];
         let currentLine = '';
@@ -4983,7 +4987,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
             runningPageNum++;
             curY = 25;
             doc.setFont('times', 'normal');
-            doc.setFontSize(14);
+            doc.setFontSize(11.5);
             doc.setTextColor(30, 41, 59);
           }
           const isParagraphLastLine = lineIdx === lines.length - 1;
@@ -5013,6 +5017,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
         // Espaçamento entre parágrafos
         curY += 2.5;
+      }
       }
 
       // Estampa o número da página na última página de texto do miolo
