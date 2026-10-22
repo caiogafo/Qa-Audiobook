@@ -2332,6 +2332,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
       try {
         const arrayBuffer = await file.arrayBuffer();
+        const originalPdfData = new Uint8Array(arrayBuffer).slice();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const totalPages = pdf.numPages;
         const pages = [];
@@ -2387,10 +2388,15 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
         document.getElementById(labelId).textContent = `Extração concluída: ${totalPages} páginas.`;
 
+        const firstPage = await pdf.getPage(1);
+        const pageSize = { width: firstPage.view[2] - firstPage.view[0], height: firstPage.view[3] - firstPage.view[1] };
+
         return {
           name: file.name,
           size: file.size,
+          originalPdfData,
           totalPages: totalPages,
+          pageSize: pageSize,
           pages: pages,
           bookPages: bookPages,
           fullText: fullText
@@ -2815,13 +2821,104 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         alertBox('Execute a comparação dos PDFs antes de baixar o roteiro revisado.');
         return;
       }
-      generateRevisedScript();
-      if (!genState.generatedDoc?.pages?.length) {
-        alertBox('Não há texto de origem disponível para compilar o roteiro revisado.');
+      const sourcePages = state.docRev.pages || [];
+      if (!sourcePages.length) {
+        alertBox('Não há páginas extraídas do PDF revisado para exportar.');
         return;
       }
-      if (format === 'docx') downloadGeneratedDocx();
-      else downloadGeneratedPdf();
+
+      // The uploaded revised PDF is the authoritative script. Preserve its
+      // opening, information pages, pagination, body, afterword and closing.
+      const pages = sourcePages.map(page => ({ ...page, text: String(page.text || '') }));
+      const startIndex = findRevisedNarrativeStart(pages);
+      const closingIndex = findRevisedClosingStart(pages, startIndex);
+      const narrativePages = pages.slice(startIndex, closingIndex);
+      const phonetics = genState.phonetics || [];
+      if (document.getElementById('genRulePhonetics')?.checked !== false && phonetics?.length) {
+        injectPhoneticsIntoPages(narrativePages, phonetics);
+      }
+
+      const titlePage = pages.find(page => /Audible\s+Studios\s+apresenta/i.test(page.text));
+      const openingTitle = titlePage?.text.match(/Audible\s+Studios\s+apresenta\s*:\s*([^\n]+)/i);
+      const title = openingTitle?.[1]?.trim() || inferBookTitleFromDocument(state.docRev, state.docRev.name || 'Roteiro revisado') || 'Roteiro revisado';
+      const authorMatch = titlePage?.text.match(/Escrito\s+por\s+([^\n]+)/i);
+      const translatorMatch = titlePage?.text.match(/Traduzido\s+por\s+([^\n]+)/i);
+      genState.generatedDoc = {
+        title,
+        author: authorMatch?.[1]?.trim() || '',
+        translator: translatorMatch?.[1]?.trim() || '',
+        pages,
+        sourceIsUploadedRevision: true,
+        sourcePageSize: state.docRev.pageSize || null
+      };
+
+      if (format === 'docx') downloadUploadedRevisionDocx(genState.generatedDoc);
+      else downloadUploadedRevisionPdf(genState.generatedDoc);
+    }
+
+    function findRevisedNarrativeStart(pages) {
+      const partIndex = pages.findIndex(page => /^\s*parte\s+(?:1|i)\s*$/im.test(page.text || ''));
+      if (partIndex >= 0) return partIndex;
+      const openingIndex = pages.findIndex(page => /Audible\s+Studios\s+apresenta|\(OPENING\s+TITLES\)/i.test(page.text || ''));
+      if (openingIndex >= 0) return Math.min(openingIndex + 1, pages.length - 1);
+      const infoIndex = pages.findIndex(page => /INFOS\s+GERAIS/i.test(page.text || ''));
+      return infoIndex >= 0 ? Math.min(infoIndex + 1, pages.length - 1) : 0;
+    }
+
+    function findRevisedClosingStart(pages, startIndex) {
+      const index = pages.findIndex((page, pageIndex) => pageIndex >= startIndex &&
+        (/\(CLOSING\s+TITLES\)|Essa\s+é\s+uma\s+produção\s+Audible\s+Studios/i.test(page.text || '')));
+      return index >= 0 ? index : pages.length;
+    }
+
+    function getUploadedRevisionFileTitle(script) {
+      return `${(script.title || 'Roteiro revisado').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50)}_Roteiro_Revisado_Audible`;
+    }
+
+    function downloadUploadedRevisionPdf(script) {
+      const sourcePdf = state.docRev?.originalPdfData;
+      if (!sourcePdf?.length) {
+        alertBox('Os dados do PDF revisado não estão mais disponíveis. Reenvie o arquivo para preservar a formatação original.');
+        return;
+      }
+      downloadBlobFile(new Blob([sourcePdf], { type: 'application/pdf' }), `${getUploadedRevisionFileTitle(script)}.pdf`);
+      alertBox(`PDF revisado original baixado sem reconstrução (${state.docRev.totalPages} páginas).`);
+    }
+
+    async function downloadUploadedRevisionDocx(script) {
+      const word = window.docx;
+      if (!word?.Document || !word.Packer) {
+        alertBox('Biblioteca DOCX não carregada. Verifique sua conexão com a internet.');
+        return;
+      }
+      const { Document, Packer, Paragraph, TextRun, AlignmentType } = word;
+      const children = [];
+      script.pages.forEach((page, pageIndex) => {
+        const lines = String(page.text || '').replace(/\r/g, '').split('\n');
+        lines.forEach((line, lineIndex) => {
+          children.push(new Paragraph({
+            children: [new TextRun({ text: line || ' ', font: 'Times New Roman', size: 20 })],
+            alignment: AlignmentType.JUSTIFIED,
+            spacing: { after: 0, line: 250 },
+            ...(pageIndex > 0 && lineIndex === 0 ? { pageBreakBefore: true } : {})
+          }));
+        });
+      });
+      try {
+        const pointToTwips = value => Math.round(value * 1440 / 72);
+        const width = script.sourcePageSize?.width || 595.28;
+        const height = script.sourcePageSize?.height || 841.89;
+        const doc = new Document({
+          creator: 'QA Audiobook', title: `${script.title} — Roteiro Revisado`,
+          sections: [{ properties: { page: { size: { width: pointToTwips(width), height: pointToTwips(height) }, margin: { top: 720, right: 720, bottom: 720, left: 720 } } }, children }]
+        });
+        const blob = await Packer.toBlob(doc);
+        downloadBlobFile(blob, `${getUploadedRevisionFileTitle(script)}.docx`);
+        alertBox(`DOCX revisado exportado com ${script.pages.length} páginas do arquivo enviado.`);
+      } catch (error) {
+        console.error('Falha ao exportar PDF revisado para DOCX:', error);
+        alertBox('Não foi possível gerar o DOCX. Tente novamente após recarregar a página.');
+      }
     }
 
     function downloadDifferenceWorkbook() {
