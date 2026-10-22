@@ -473,6 +473,7 @@
           <button onclick="downloadAuditedRevised('pdf')" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-500">Baixar PDF revisado com correções</button>
           <button onclick="downloadAuditedRevised('docx')" class="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-500">Roteiro revisado DOCX</button>
           <button onclick="downloadDifferenceWorkbook()" class="rounded-lg bg-cyan-700 px-3 py-2 text-xs font-bold text-white hover:bg-cyan-600">Planilha de diferenças XLSX</button>
+          <button onclick="switchTab('phoneticTab')" class="rounded-lg border border-cyan-700/70 bg-cyan-950/50 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-900">Revisar / remover pronúncias</button>
         </div>
       </div>
       <!-- Structural Alert Box -->
@@ -3002,10 +3003,11 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       grid.innerHTML = '';
       const data = state.phonetics || [];
 
-      const filtered = data.filter(item =>
-        item.word.toLowerCase().includes(filterText.toLowerCase()) ||
-        item.ipa.toLowerCase().includes(filterText.toLowerCase()) ||
-        item.lang.toLowerCase().includes(filterText.toLowerCase())
+      const query = filterText.toLocaleLowerCase('pt-BR');
+      const filtered = data.map((item, originalIndex) => ({ item, originalIndex })).filter(({ item }) =>
+        String(item.word || '').toLocaleLowerCase('pt-BR').includes(query) ||
+        String(item.ipa || '').toLocaleLowerCase('pt-BR').includes(query) ||
+        String(item.lang || '').toLocaleLowerCase('pt-BR').includes(query)
       );
 
       const metricPhonetics = document.getElementById('metric-phonetics');
@@ -3023,18 +3025,18 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         return;
       }
 
-      filtered.forEach((item, index) => {
+      filtered.forEach(({ item, originalIndex }) => {
         const card = document.createElement('div');
         card.className = "bg-slate-950/80 border border-slate-800 hover:border-cyan-500/40 rounded-xl p-3.5 flex flex-col justify-between transition group";
         card.innerHTML = `
           <div>
             <div class="flex items-center justify-between gap-1 mb-1.5">
               <span class="font-bold text-white text-xs group-hover:text-cyan-300 transition">${escapeHtml(item.word)}</span>
-              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">${escapeHtml(item.lang)}</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">${escapeHtml(item.lang || 'Não informado')}</span>
             </div>
             <div class="flex items-center justify-between bg-cyan-950/30 px-2.5 py-1.5 rounded-lg border border-cyan-800/40 my-1">
               <span class="font-mono text-cyan-300 text-xs font-semibold">${escapeHtml(item.ipa)}</span>
-              <button onclick="speakWord('${escapeHtml(item.word)}', '${escapeHtml(item.lang)}')" title="Ouvir pronúncia" class="w-6 h-6 rounded-md bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 flex items-center justify-center transition">
+              <button onclick="speakWord('${escapeHtml(item.word)}', '${escapeHtml(item.lang || '')}')" title="Ouvir pronúncia" class="w-6 h-6 rounded-md bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 flex items-center justify-center transition">
                 <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
               </button>
             </div>
@@ -3043,6 +3045,9 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
             <span>Pág. Rev / Orig:</span>
             <span class="font-mono font-medium text-slate-300">Pág. ${escapeHtml(item.pagRev)} / ${escapeHtml(item.pagOrig)}</span>
           </div>
+          <button onclick="removeComparedPhonetic(${originalIndex})" class="mt-2 self-end rounded-md border border-rose-900/70 bg-rose-950/40 px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-900/60" title="Remover esta pronúncia das próximas exportações">
+            Remover pronúncia
+          </button>
         `;
         grid.appendChild(card);
       });
@@ -3051,6 +3056,23 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
     function filterPhonetics(query) {
       renderPhonetics(query);
+    }
+
+    function removeComparedPhonetic(index) {
+      const item = state.phonetics?.[index];
+      if (!item) return;
+      const sameTerm = candidate =>
+        String(candidate?.word || '').trim().toLocaleLowerCase('pt-BR') === String(item.word || '').trim().toLocaleLowerCase('pt-BR') &&
+        String(candidate?.ipa || '').trim().toLocaleLowerCase('pt-BR') === String(item.ipa || '').trim().toLocaleLowerCase('pt-BR');
+
+      state.phonetics.splice(index, 1);
+      const generatorIndex = (genState.phonetics || []).findIndex(sameTerm);
+      if (generatorIndex >= 0) genState.phonetics.splice(generatorIndex, 1);
+
+      renderPhonetics(document.getElementById('phoneticSearch')?.value || '');
+      renderGenPhoneticsList();
+      if (state.docOrig) generateRevisedScript();
+      alertBox(`Pronúncia de “${item.word}” removida. Ela não será incluída nas próximas exportações do roteiro.`);
     }
 
     /**
