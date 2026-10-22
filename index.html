@@ -2360,10 +2360,33 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
           const viewport = page.getViewport({ scale: 1.0 });
           const textContent = await page.getTextContent();
           const pageText = reconstructPdfPageText(textContent, viewport);
+          let renderedPageImage = null;
+          // Some title/front-matter pages use font encodings PDF.js cannot map
+          // to text even though the page renders normally. Keep a visual copy
+          // so the revised-PDF export does not turn those pages blank.
+          if (!pageText.trim()) {
+            const renderScale = 2;
+            const renderViewport = page.getViewport({ scale: renderScale });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.ceil(renderViewport.width);
+            canvas.height = Math.ceil(renderViewport.height);
+            const canvasContext = canvas.getContext('2d');
+            if (canvasContext) {
+              try {
+                await page.render({ canvasContext, viewport: renderViewport }).promise;
+                renderedPageImage = canvas.toDataURL('image/png');
+              } catch (renderError) {
+                console.warn(`Não foi possível preservar visualmente a página ${i}:`, renderError);
+              }
+            }
+            canvas.width = 0;
+            canvas.height = 0;
+          }
 
           pages.push({
             pageNum: i,
-            text: pageText.trim()
+            text: pageText.trim(),
+            renderedPageImage
           });
 
           const spread = type === 'orig' ? splitPdfSpreadText(textContent, viewport, i, spreadMode) : null;
@@ -2966,6 +2989,10 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
       script.pages.forEach((page, pageIndex) => {
         if (pageIndex > 0) doc.addPage(pageFormat, 'portrait');
+        if (page.renderedPageImage) {
+          doc.addImage(page.renderedPageImage, 'PNG', 0, 0, pageWidth, pageHeight);
+          return;
+        }
         const sourceLines = String(page.text || '').replace(/\r/g, '').split('\n');
         let fontSize = pageWidth < 150 ? 9.5 : 11;
         let lines = [];
