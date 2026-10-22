@@ -2332,7 +2332,6 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
       try {
         const arrayBuffer = await file.arrayBuffer();
-        const originalPdfData = new Uint8Array(arrayBuffer).slice();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const totalPages = pdf.numPages;
         const pages = [];
@@ -2394,7 +2393,6 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         return {
           name: file.name,
           size: file.size,
-          originalPdfData,
           totalPages: totalPages,
           pageSize: pageSize,
           pages: pages,
@@ -2452,6 +2450,14 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         .trim();
     }
 
+    function findPresetKeyForDocument(doc, fileName = '') {
+      const sample = `${fileName} ${doc?.name || ''} ${(doc?.pages || []).slice(0, 8).map(page => page.text || '').join(' ')}`
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+      if (/beijodamulheraranha|beijo da mulher-aranha/.test(sample)) return 'beijo';
+      if (/as quintas que eu perdi/.test(sample) || /asquintasqueeuperdi/.test(sample)) return 'quintas';
+      return null;
+    }
+
     async function processUploadedFile(file, type) {
       if (type === 'orig') {
         document.getElementById('origFileStatus').textContent = `Carregando ${file.name}...`;
@@ -2463,6 +2469,11 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         const genTitleInput = document.getElementById('genTitle');
         if (genTitleInput) genTitleInput.value = cleanName;
         state.currentPresetKey = null;
+        const matchedPresetKey = findPresetKeyForDocument(state.docOrig, file.name);
+        const curatedPhonetics = matchedPresetKey ? (PRESETS[matchedPresetKey]?.phonetics || []) : [];
+        if (curatedPhonetics.length) {
+          genState.phonetics = curatedPhonetics.map(item => ({ ...item, source: 'curated' }));
+        }
         ['genPontoDeVista', 'genIdade', 'genGenero', 'genOrigemSotaque', 'genLocalCenario', 'genTom', 'genRitmo', 'genInterpretacao', 'genPontosAtencao', 'genConteudoSensivel'].forEach(id => {
           const field = document.getElementById(id);
           if (field) field.value = '';
@@ -2833,7 +2844,30 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       const startIndex = findRevisedNarrativeStart(pages);
       const closingIndex = findRevisedClosingStart(pages, startIndex);
       const narrativePages = pages.slice(startIndex, closingIndex);
-      const phonetics = genState.phonetics || [];
+      const removeNotes = document.getElementById('genRuleFootnotes')?.checked !== false;
+      if (removeNotes) {
+        narrativePages.forEach(page => { page.text = removeFootnotesFromText(page.text); });
+      }
+      const existingNarrationAnnotations = narrativePages.reduce((count, page) =>
+        count + (page.text.match(/\[[^\]\n]+\]/g) || []).length, 0);
+      // Only keep suggestions that occur in the narration after notes are
+      // removed. This avoids annotating names that appeared only in footnotes.
+      const narrationText = narrativePages.map(page => page.text).join('\n');
+      const phonetics = (genState.phonetics || []).filter(item => {
+        const word = String(item?.word || '').trim();
+        if (!word) return false;
+        const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'iu').test(narrationText);
+      }).flatMap(item => {
+        const words = String(item.word || '').split(/\s*\/\s*/);
+        const pronunciations = String(item.ipa || '').split(/\s*\/\s*/);
+        if (words.length > 1 && words.length === pronunciations.length) {
+          return words.map((word, index) => ({ ...item, word, ipa: pronunciations[index] }));
+        }
+        return [item];
+      }).filter(item => new RegExp(
+        `(?<![\\p{L}\\p{N}])${String(item.word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}(?![\\p{L}\\p{N}])`, 'iu'
+      ).test(narrationText));
       if (document.getElementById('genRulePhonetics')?.checked !== false && phonetics?.length) {
         injectPhoneticsIntoPages(narrativePages, phonetics);
       }
@@ -2848,6 +2882,8 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         author: authorMatch?.[1]?.trim() || '',
         translator: translatorMatch?.[1]?.trim() || '',
         pages,
+        pronunciationsAdded: Math.max(0, narrativePages.reduce((count, page) =>
+          count + (page.text.match(/\[[^\]\n]+\]/g) || []).length, 0) - existingNarrationAnnotations),
         sourceIsUploadedRevision: true,
         sourcePageSize: state.docRev.pageSize || null
       };
@@ -2876,13 +2912,73 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
     }
 
     function downloadUploadedRevisionPdf(script) {
-      const sourcePdf = state.docRev?.originalPdfData;
-      if (!sourcePdf?.length) {
-        alertBox('Os dados do PDF revisado não estão mais disponíveis. Reenvie o arquivo para preservar a formatação original.');
+      if (!window.jspdf?.jsPDF) {
+        alertBox('Biblioteca jsPDF não carregada. Verifique sua conexão com a internet.');
         return;
       }
-      downloadBlobFile(new Blob([sourcePdf], { type: 'application/pdf' }), `${getUploadedRevisionFileTitle(script)}.pdf`);
-      alertBox(`PDF revisado original baixado sem reconstrução (${state.docRev.totalPages} páginas).`);
+      const { jsPDF } = window.jspdf;
+      const sourceSize = script.sourcePageSize || { width: 595.28, height: 841.89 };
+      const pageFormat = [sourceSize.width * 25.4 / 72, sourceSize.height * 25.4 / 72];
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: pageFormat, compress: true });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const marginX = Math.max(13, pageWidth * 0.13);
+      const marginTop = Math.max(13, pageHeight * 0.105);
+      const marginBottom = Math.max(13, pageHeight * 0.10);
+      const titlePages = script.pages.map(page => /Audible\s+Studios\s+apresenta/i.test(page.text || '') ||
+        /^Essa\s+é\s+uma\s+produção\s+Audible\s+Studios/im.test(page.text || ''));
+
+      script.pages.forEach((page, pageIndex) => {
+        if (pageIndex > 0) doc.addPage(pageFormat, 'portrait');
+        const sourceLines = String(page.text || '').replace(/\r/g, '').split('\n');
+        let fontSize = pageWidth < 150 ? 9.5 : 11;
+        let lines = [];
+        let lineHeight = 0;
+        const isCreditPage = titlePages[pageIndex];
+        const isCover = pageIndex === 0 && sourceLines.filter(line => line.trim()).length <= 4;
+        const usableWidth = pageWidth - marginX * 2;
+        while (fontSize >= 6) {
+          doc.setFont('times', 'normal');
+          doc.setFontSize(fontSize);
+          lineHeight = fontSize * 0.43;
+          lines = sourceLines.flatMap(line => line.trim()
+            ? doc.splitTextToSize(line.trim(), usableWidth)
+            : ['']);
+          const occupied = lines.length * lineHeight;
+          if (occupied <= pageHeight - marginTop - marginBottom) break;
+          fontSize -= 0.5;
+        }
+
+        doc.setFont('times', 'normal');
+        doc.setFontSize(fontSize);
+        doc.setTextColor(15, 35, 55);
+        let y = isCover || isCreditPage
+          ? Math.max(marginTop, (pageHeight - lines.length * lineHeight) / 2)
+          : marginTop;
+        let previousWasBlank = true;
+        for (const line of lines) {
+          if (y > pageHeight - marginBottom) {
+            // Preserve all source text if an unusually dense source page needs
+            // a continuation page after fitting down to the minimum font size.
+            doc.addPage(pageFormat, 'portrait');
+            y = marginTop;
+          }
+          if (line) {
+            const isHeading = /^(?:INFOS GERAIS|Parte\s+\d+|CAP(?:ÍTULO)?\s+\d+)$/i.test(line.trim());
+            doc.setFont('times', isHeading ? 'bold' : 'normal');
+            const align = isCreditPage || isCover ? 'center' : 'left';
+            const x = align === 'center' ? pageWidth / 2 : marginX + (previousWasBlank ? 3 : 0);
+            doc.text(line, x, y, { align });
+            previousWasBlank = false;
+          } else {
+            previousWasBlank = true;
+          }
+          y += lineHeight;
+        }
+      });
+
+      downloadBlobFile(doc.output('blob'), `${getUploadedRevisionFileTitle(script)}.pdf`);
+      alertBox(`PDF revisado exportado com ${script.pages.length} páginas e ${script.pronunciationsAdded || 0} pronúncias inseridas no texto.`);
     }
 
     async function downloadUploadedRevisionDocx(script) {
@@ -4160,7 +4256,9 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       const sortedDictKeys = Object.keys(LITERARY_PHONETICS_DICT).sort((a, b) => b.length - a.length);
 
       for (const p of pages) {
-        const pageText = p.text || '';
+        // Do not propose pronunciations for names found only in footnotes,
+        // which are removed from the recording script.
+        const pageText = removeFootnotesFromText(p.text || '');
         if (isBlankPage(pageText)) continue;
 
         for (const term of sortedDictKeys) {
