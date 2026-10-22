@@ -2461,6 +2461,12 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
     async function processUploadedFile(file, type) {
       if (type === 'orig') {
         document.getElementById('origFileStatus').textContent = `Carregando ${file.name}...`;
+        // A newly selected original starts a new comparison pair. Never keep
+        // the previous book's revised PDF available for matching/filtering.
+        state.docRev = null;
+        state.auditMetrics = null;
+        const revStatus = document.getElementById('revFileStatus');
+        if (revStatus) revStatus.innerHTML = 'Arraste o PDF ou clique para selecionar';
         state.docOrig = await extractPdfText(file, 'orig');
         document.getElementById('origFileStatus').innerHTML = `<span class="text-amber-400 font-medium">✓ ${state.docOrig.name}</span> (${state.docOrig.totalPages} págs)`;
 
@@ -2469,6 +2475,10 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         const genTitleInput = document.getElementById('genTitle');
         if (genTitleInput) genTitleInput.value = cleanName;
         state.currentPresetKey = null;
+        // Pronunciation choices belong to one work only. Clear the previous
+        // book before loading this work's curated and automatically found terms.
+        state.phonetics = [];
+        genState.phonetics = [];
         const matchedPresetKey = findPresetKeyForDocument(state.docOrig, file.name);
         const curatedPhonetics = matchedPresetKey ? (PRESETS[matchedPresetKey]?.phonetics || []) : [];
         if (curatedPhonetics.length) {
@@ -2510,6 +2520,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
 
         // Automatically analyze original PDF for phonetics
         extractPhoneticsFromOriginalDoc(true);
+        filterPhoneticsToCurrentRevision(state.docOrig);
 
         if (typeof generateRevisedScript === 'function') {
           generateRevisedScript();
@@ -2519,6 +2530,7 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
         document.getElementById('revFileStatus').textContent = `Carregando ${file.name}...`;
         state.docRev = await extractPdfText(file, 'rev');
         document.getElementById('revFileStatus').innerHTML = `<span class="text-emerald-400 font-medium">✓ ${state.docRev.name}</span> (${state.docRev.totalPages} págs)`;
+        filterPhoneticsToCurrentRevision(state.docRev);
       }
 
       alertBox(`PDF "${file.name}" extraído com sucesso!`);
@@ -2905,6 +2917,30 @@ Mais tarde, ao percorrer os caminhos enevoados de Sintra [SĨ-tra] e os jardins 
       const index = pages.findIndex((page, pageIndex) => pageIndex >= startIndex &&
         (/\(CLOSING\s+TITLES\)|Essa\s+é\s+uma\s+produção\s+Audible\s+Studios/i.test(page.text || '')));
       return index >= 0 ? index : pages.length;
+    }
+
+    function filterPhoneticsToCurrentRevision(revisedDoc) {
+      if (!revisedDoc?.pages?.length) return;
+      const pages = revisedDoc.pages;
+      const start = findRevisedNarrativeStart(pages);
+      const end = findRevisedClosingStart(pages, start);
+      const narrationPages = pages.slice(start, end).map(page => ({
+        pageNum: page.pageNum,
+        text: document.getElementById('genRuleFootnotes')?.checked === false
+          ? String(page.text || '')
+          : removeFootnotesFromText(String(page.text || ''))
+      }));
+      const containsTerm = (text, word) => String(word || '').split(/\s*\/\s*/).some(alternative => {
+        const escaped = alternative.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        return escaped && new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'iu').test(text);
+      });
+      const currentTerms = (state.phonetics || []).filter(item =>
+        narrationPages.some(page => containsTerm(page.text, item.word))
+      );
+      state.phonetics = currentTerms;
+      genState.phonetics = currentTerms.map(item => ({ ...item }));
+      renderPhonetics(document.getElementById('phoneticSearch')?.value || '');
+      renderGenPhoneticsList();
     }
 
     function getUploadedRevisionFileTitle(script) {
